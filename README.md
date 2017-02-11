@@ -40,3 +40,7 @@ def open_device(self, device_id):
 
 def set_state(self, device_id, state):
 """Send request for request door state change."""
+
+### Disclaimer
+
+The code here is based off of an unsupported API from [Chamberlain](http://www.chamberlain.com/) and is subject to change without notice. The authors claim no responsibility for damages to your garage door or property by use of the code within.
