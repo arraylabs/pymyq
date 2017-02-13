@@ -21,7 +21,7 @@ class MyQAPI:
             HOST_URI: 'myqexternal.myqdevice.com'
         },
         CHAMBERLAIN: {
-            APP_ID: 'Vj8pQggXLhLy0WHahglCD4N1nAkkXQtGYpq2HrHD7H1nvmbT55KqtN6RSF4ILB%2Fi',
+            APP_ID: 'JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu', #Vj8pQggXLhLy0WHahglCD4N1nAkkXQtGYpq2HrHD7H1nvmbT55KqtN6RSF4ILB%2Fi
             HOST_URI: 'myqexternal.myqdevice.com'
         },
         CRAFTMASTER: {
@@ -33,8 +33,7 @@ class MyQAPI:
     STATE_OPEN = 'open'
     STATE_CLOSED = 'closed'
 
-    LOCALE = "en"
-    LOGIN_ENDPOINT = "api/user/validatewithculture"
+    LOGIN_ENDPOINT = "api/v4/user/validate"
     DEVICE_LIST_ENDPOINT = "api/v4/userdevicedetails/get"
     DEVICE_SET_ENDPOINT = "api/v4/DeviceAttribute/PutDeviceAttribute"
     HEADERS = {'User-Agent': 'Chamberlain/3773 (iPhone; iOS 10.0.1; Scale/2.00)'}
@@ -79,12 +78,15 @@ class MyQAPI:
         }
 
         try:
-            login = requests.get(
+            login = requests.post(
                 'https://{host_uri}/{login_endpoint}'.format(
                     host_uri=self.BRAND_MAPPINGS[self.brand][self.HOST_URI],
                     login_endpoint=self.LOGIN_ENDPOINT),
-                    params=params,
-                    headers=self.HEADERS,
+                    json=params,
+                    headers={
+                       'MyQApplicationId': 'JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu',
+                       'User-Agent': 'Chamberlain/3773 (iPhone; iOS 10.0.1; Scale/2.00)'
+                    },
                     timeout=self.REQUEST_TIMEOUT
             )
 
