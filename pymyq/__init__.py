@@ -90,8 +90,8 @@ class MyQAPI:
             )
 
             login.raise_for_status()
-        except requests.exceptions.HTTPError as err:
-            self.logger.error("MyQ - API Error %s", ex)
+        except requests.exceptions.HTTPError as ex:
+            self.logger.error("MyQ - API Error[is_login_valid] %s", ex)
             return False
 
         try:
@@ -123,8 +123,8 @@ class MyQAPI:
             devices = devices.json()['Devices']
 
             return devices
-        except requests.exceptions.HTTPError as err:
-            self.logger.error("MyQ - API Error %s", ex)
+        except requests.exceptions.HTTPError as ex:
+            self.logger.error("MyQ - API Error[get_devices] %s", ex)
             return False
 
     def get_garage_doors(self):
@@ -190,9 +190,9 @@ class MyQAPI:
                     }
             )
 
-            devices.raise_for_status()
+            device_action.raise_for_status()
         except (NameError, requests.exceptions.HTTPError) as ex:
-            self.logger.error("MyQ - API Error %s", ex)
+            self.logger.error("MyQ - API Error[set_state] %s", ex)
             return False
 
         return device_action.status_code == 200
