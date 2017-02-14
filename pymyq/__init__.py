@@ -7,36 +7,37 @@ class MyQAPI:
 
     LIFTMASTER = 'liftmaster'
     CHAMBERLAIN = 'chamberlain'
-    CRAFTMASTER = 'craftmaster'
+    CRAFTSMAN = 'craftsman'
+    MERLIN = 'merlin'
 
-    SUPPORTED_BRANDS = [LIFTMASTER, CHAMBERLAIN, CRAFTMASTER]
+    SUPPORTED_BRANDS = [LIFTMASTER, CHAMBERLAIN, CRAFTSMAN, MERLIN]
     SUPPORTED_DEVICE_TYPE_NAMES = ['GarageDoorOpener', 'Garage Door Opener WGDO', 'VGDO']
 
     APP_ID = 'app_id'
-    HOST_URI = 'host_uri'
+    HOST_URI = 'myqexternal.myqdevice.com'
 
     BRAND_MAPPINGS = {
         LIFTMASTER: {
-            APP_ID: 'JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu',
-            HOST_URI: 'myqexternal.myqdevice.com'
+            APP_ID: 'Vj8pQggXLhLy0WHahglCD4N1nAkkXQtGYpq2HrHD7H1nvmbT55KqtN6RSF4ILB/i'
         },
         CHAMBERLAIN: {
-            APP_ID: 'JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu', #Vj8pQggXLhLy0WHahglCD4N1nAkkXQtGYpq2HrHD7H1nvmbT55KqtN6RSF4ILB%2Fi
-            HOST_URI: 'myqexternal.myqdevice.com'
+            APP_ID: 'OA9I/hgmPHFp9RYKJqCKfwnhh28uqLJzZ9KOJf1DXoo8N2XAaVX6A1wcLYyWsnnv'
         },
-        CRAFTMASTER: {
-            APP_ID: 'eU97d99kMG4t3STJZO/Mu2wt69yTQwM0WXZA5oZ74/ascQ2xQrLD/yjeVhEQccBZ',
-            HOST_URI: 'craftexternal.myqdevice.com'
+        CRAFTSMAN: {
+            APP_ID: 'YmiMRRS1juXdSd0KWsuKtHmQvh5RftEp5iewHdCvsNB77FnQbY+vjCVn2nMdIeN8'
+        },
+        MERLIN: {
+            APP_ID: '3004cac4e920426c823fa6c2ecf0cc28ef7d4a7b74b6470f8f0d94d6c39eb718'
         }
     }
 
     STATE_OPEN = 'open'
     STATE_CLOSED = 'closed'
 
-    LOGIN_ENDPOINT = "api/v4/user/validate"
-    DEVICE_LIST_ENDPOINT = "api/v4/userdevicedetails/get"
+    LOGIN_ENDPOINT = "api/v4/User/Validate"
+    DEVICE_LIST_ENDPOINT = "api/v4/UserDeviceDetails/Get"
     DEVICE_SET_ENDPOINT = "api/v4/DeviceAttribute/PutDeviceAttribute"
-    HEADERS = {'User-Agent': 'Chamberlain/3773 (iPhone; iOS 10.0.1; Scale/2.00)'}
+    USERAGENT = "Chamberlain/3773 (iPhone; iOS 10.0.1; Scale/2.00)"
 
     REQUEST_TIMEOUT = 3.0
 
@@ -72,20 +73,18 @@ class MyQAPI:
         """Log in to the MyQ service."""
         params = {
             'username': self.username,
-            'password': self.password,
-            'appId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
-            'culture': self.LOCALE
+            'password': self.password
         }
 
         try:
             login = requests.post(
                 'https://{host_uri}/{login_endpoint}'.format(
-                    host_uri=self.BRAND_MAPPINGS[self.brand][self.HOST_URI],
+                    host_uri=self.HOST_URI,
                     login_endpoint=self.LOGIN_ENDPOINT),
                     json=params,
                     headers={
-                       'MyQApplicationId': 'JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu',
-                       'User-Agent': 'Chamberlain/3773 (iPhone; iOS 10.0.1; Scale/2.00)'
+                       'MyQApplicationId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
+                       'User-Agent': self.USERAGENT
                     },
                     timeout=self.REQUEST_TIMEOUT
             )
@@ -107,18 +106,16 @@ class MyQAPI:
         if not self._logged_in:
             self._logged_in = self.is_login_valid()
 
-        params = {
-            'appId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
-            'securityToken': self.security_token
-        }
-
         try:
             devices = requests.get(
                 'https://{host_uri}/{device_list_endpoint}'.format(
-                    host_uri=self.BRAND_MAPPINGS[self.brand][self.HOST_URI],
+                    host_uri=self.HOST_URI,
                     device_list_endpoint=self.DEVICE_LIST_ENDPOINT),
-                    params=params,
-                    headers=self.HEADERS
+                    headers={
+                        'MyQApplicationId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
+                        'SecurityToken': self.security_token,
+                        'User-Agent': self.USERAGENT
+                    }
             )
 
             devices.raise_for_status()
@@ -175,22 +172,21 @@ class MyQAPI:
     def set_state(self, device_id, state):
         """Set device state."""
         payload = {
-            'AttributeName': 'desireddoorstate',
-            'MyQDeviceId': device_id,
-            'ApplicationId': 'JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu',
+            'attributeName': 'desireddoorstate',
+            'myQDeviceId': device_id,
             'AttributeValue': state,
-            'SecurityToken': self.security_token,
         }
 
         try:
             device_action = requests.put(
                 'https://{host_uri}/{device_set_endpoint}'.format(
-                    host_uri=self.BRAND_MAPPINGS[self.brand][self.HOST_URI],
+                    host_uri=self.HOST_URI,
                     device_set_endpoint=self.DEVICE_SET_ENDPOINT),
                     data=payload,
                     headers={
-                        'MyQApplicationId': 'JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu',
-                        'SecurityToken': self.security_token
+                        'MyQApplicationId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
+                        'SecurityToken': self.security_token,
+                        'User-Agent': self.USERAGENT
                     }
             )
 
@@ -200,4 +196,3 @@ class MyQAPI:
             return False
 
         return device_action.status_code == 200
-
