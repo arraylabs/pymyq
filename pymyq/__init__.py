@@ -11,7 +11,7 @@ class MyQAPI:
     MERLIN = 'merlin'
 
     SUPPORTED_BRANDS = [LIFTMASTER, CHAMBERLAIN, CRAFTSMAN, MERLIN]
-    SUPPORTED_DEVICE_TYPE_NAMES = ['GarageDoorOpener', 'Garage Door Opener WGDO', 'VGDO']
+    SUPPORTED_DEVICE_TYPE_NAMES = ['GarageDoorOpener', 'Garage Door Opener WGDO', 'VGDO', 'Gate']
 
     APP_ID = 'app_id'
     HOST_URI = 'myqexternal.myqdevice.com'
