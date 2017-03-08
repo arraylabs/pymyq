@@ -44,6 +44,7 @@ class MyQAPI:
     DOOR_STATE = {
         '1': STATE_OPEN, #'open',
         '2': STATE_CLOSED, #'close',
+        '3': STATE_OPEN, #'stopped',
         '4': STATE_OPEN, #'opening',
         '5': STATE_CLOSED, #'closing',
         '8': STATE_OPEN, #'in_transition',
