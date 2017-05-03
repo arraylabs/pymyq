@@ -132,35 +132,41 @@ class MyQAPI:
         """List only MyQ garage door devices."""
         devices = self.get_devices()
 
-        garage_doors = []
+        if devices != False:
+            garage_doors = []
 
-        try:
-            for device in devices:
-                if device['MyQDeviceTypeName'] in self.SUPPORTED_DEVICE_TYPE_NAMES:
-                    dev = {}
-                    for attribute in device['Attributes']:
-                        if attribute['AttributeDisplayName'] == 'desc':
-                            dev['deviceid'] = device['MyQDeviceId']
-                            dev['name'] = attribute['Value']
-                            garage_doors.append(dev)
+            try:
+                for device in devices:
+                    if device['MyQDeviceTypeName'] in self.SUPPORTED_DEVICE_TYPE_NAMES:
+                        dev = {}
+                        for attribute in device['Attributes']:
+                            if attribute['AttributeDisplayName'] == 'desc':
+                                dev['deviceid'] = device['MyQDeviceId']
+                                dev['name'] = attribute['Value']
+                                garage_doors.append(dev)
 
-            return garage_doors
-        except TypeError:
-            return False
+                return garage_doors
+            except TypeError:
+                return False
+        else:
+            return False;
 
     def get_status(self, device_id):
         """List only MyQ garage door devices."""
         devices = self.get_devices()
 
-        for device in devices:
-            if device['MyQDeviceTypeName'] in self.SUPPORTED_DEVICE_TYPE_NAMES and device['MyQDeviceId'] == device_id:
-                dev = {}
-                for attribute in device['Attributes']:
-                   if attribute['AttributeDisplayName'] == 'doorstate':
-                        garage_state = attribute['Value']
+        if devices != False:
+            for device in devices:
+                if device['MyQDeviceTypeName'] in self.SUPPORTED_DEVICE_TYPE_NAMES and device['MyQDeviceId'] == device_id:
+                    dev = {}
+                    for attribute in device['Attributes']:
+                       if attribute['AttributeDisplayName'] == 'doorstate':
+                            garage_state = attribute['Value']
 
-        garage_state = self.DOOR_STATE[garage_state]
-        return garage_state
+            garage_state = self.DOOR_STATE[garage_state]
+            return garage_state
+        else:
+            return False
 
     def close_device(self, device_id):
         """Close MyQ Device."""
