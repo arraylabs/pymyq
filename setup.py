@@ -6,7 +6,7 @@ with open('LICENSE') as f:
 
 setup(
     name='pymyq',
-    version='0.0.8',
+    version='0.0.9',
     description='Python package for controlling MyQ-Enabled Garage Door',
     author='Chris Campbell',
     author_email='chris@arraylabs.com',
