@@ -37,7 +37,7 @@ class MyQAPI:
     LOGIN_ENDPOINT = "api/v4/User/Validate"
     DEVICE_LIST_ENDPOINT = "api/v4/UserDeviceDetails/Get"
     DEVICE_SET_ENDPOINT = "api/v4/DeviceAttribute/PutDeviceAttribute"
-    USERAGENT = "Chamberlain/3773 (iPhone; iOS 10.0.1; Scale/2.00)"
+    USERAGENT = "Chamberlain/3773 (iPhone; iOS 11.0.3; Scale/2.00)"
 
     REQUEST_TIMEOUT = 3.0
 
