@@ -46,7 +46,7 @@ class MyQAPI:
         '2': STATE_CLOSED, #'close',
         '3': STATE_OPEN, #'stopped',
         '4': STATE_OPEN, #'opening',
-        '5': STATE_CLOSED, #'closing',
+        '5': STATE_OPEN, #'closing',
         '8': STATE_OPEN, #'in_transition',
         '9': STATE_OPEN, #'open'
     }
