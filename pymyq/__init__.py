@@ -33,6 +33,11 @@ class MyQAPI:
 
     STATE_OPEN = 'open'
     STATE_CLOSED = 'closed'
+    STATE_STOPPED = 'stopped'
+    STATE_OPENING = 'opening'
+    STATE_CLOSING = 'closing'
+    STATE_UNKNOWN = 'unknown'
+    STATE_TRANSITION = 'transition'
 
     LOGIN_ENDPOINT = "api/v4/User/Validate"
     DEVICE_LIST_ENDPOINT = "api/v4/UserDeviceDetails/Get"
@@ -42,13 +47,15 @@ class MyQAPI:
     REQUEST_TIMEOUT = 3.0
 
     DOOR_STATE = {
-        '1': STATE_OPEN, #'open',
-        '2': STATE_CLOSED, #'close',
-        '3': STATE_OPEN, #'stopped',
-        '4': STATE_OPEN, #'opening',
-        '5': STATE_OPEN, #'closing',
-        '8': STATE_OPEN, #'in_transition',
-        '9': STATE_OPEN, #'open'
+        '1': STATE_OPEN,
+        '2': STATE_CLOSED,
+        '3': STATE_STOPPED,
+        '4': STATE_OPENING,
+        '5': STATE_CLOSING,
+        '6': STATE_UNKNOWN,
+        '7': STATE_UNKNOWN,
+        '8': STATE_TRANSITION,
+        '9': STATE_OPEN,
     }
 
     logger = logging.getLogger(__name__)
