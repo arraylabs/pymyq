@@ -193,7 +193,7 @@ class MyQAPI:
                         'SecurityToken': self.security_token
                     },
                     params={
-                        'AttributName': 'doorstate',
+                        'AttributeName': 'doorstate',
                         'MyQDeviceId': device_id
                     }
             )
