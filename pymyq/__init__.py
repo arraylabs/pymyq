@@ -166,22 +166,12 @@ class MyQAPI:
             return False;
 
     def get_status(self, device_id):
-        """List only MyQ garage door devices."""
-        #devices = self.get_devices()
+        """Get only door states"""
 
         if not self._logged_in:
             self._logged_in = self.is_login_valid()
 
         garage_state = False
-
-        # if devices != False:
-        #     for device in devices:
-        #         if device['MyQDeviceTypeName'] in self.SUPPORTED_DEVICE_TYPE_NAMES and device['MyQDeviceId'] == device_id:
-        #             dev = {}
-        #             for attribute in device['Attributes']:
-        #                 if attribute['AttributeDisplayName'] == 'doorstate':
-        #                     myq_garage_state = attribute['Value']
-        #                     garage_state = self.DOOR_STATE[myq_garage_state]
 
         try:
             doorstate = requests.get(
