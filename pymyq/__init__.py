@@ -192,7 +192,7 @@ class MyQAPI:
                         'MyQApplicationId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
                         'SecurityToken': self.security_token
                     },
-                    query={
+                    params={
                         'AttributName': 'doorstate',
                         'MyQDeviceId': device_id
                     }
@@ -205,7 +205,7 @@ class MyQAPI:
             return False
 
         doorstate = doorstate['AttributeValue']
-        
+
         garage_state = self.DOOR_STATE[doorstate]
 
         return garage_state
