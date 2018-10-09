@@ -194,7 +194,7 @@ class MyQAPI:
             self.logger.error("MyQ - API Error[get_status] %s", ex)
             return False
 
-        doorstate = doorstate['AttributeValue']
+        doorstate = doorstate.json()['AttributeValue']
 
         garage_state = self.DOOR_STATE[doorstate]
 
