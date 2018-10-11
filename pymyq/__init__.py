@@ -1,5 +1,6 @@
 import requests
 import logging
+from time import sleep
 
 
 class MyQAPI:
@@ -173,27 +174,34 @@ class MyQAPI:
 
         garage_state = False
 
-        try:
-            doorstate = requests.get(
-                'https://{host_uri}/{device_attribute_get_endpoint}'.format(
-                    host_uri=self.HOST_URI,
-                    device_attribute_get_endpoint=self.DEVICE_ATTRIBUTE_GET_ENDPOINT),
-                    headers={
-                        'MyQApplicationId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
-                        'SecurityToken': self.security_token
-                    },
-                    params={
-                        'AttributeName': 'doorstate',
-                        'MyQDeviceId': device_id
-                    }
-            )
+        get_status_attempt = 0
+        for (get_status_attempt < 3):
+            try:
+                doorstate = requests.get(
+                    'https://{host_uri}/{device_attribute_get_endpoint}'.format(
+                        host_uri=self.HOST_URI,
+                        device_attribute_get_endpoint=self.DEVICE_ATTRIBUTE_GET_ENDPOINT),
+                        headers={
+                            'MyQApplicationId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
+                            'SecurityToken': self.security_token
+                        },
+                        params={
+                            'AttributeName': 'doorstate',
+                            'MyQDeviceId': device_id
+                        }
+                )
 
-            doorstate.raise_for_status()
+                doorstate.raise_for_status()
+                get_status_attempt = 3
 
-        except requests.exceptions.HTTPError as ex:
+            except requests.exceptions.HTTPError as ex:
+                get_status_attempt = get_status_attempt + 1
+                sleep(5)
+
+        else:
             self.logger.error("MyQ - API Error[get_status] %s", ex)
             return False
-
+        
         doorstate = doorstate.json()['AttributeValue']
 
         garage_state = self.DOOR_STATE[doorstate]
