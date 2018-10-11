@@ -175,7 +175,7 @@ class MyQAPI:
         garage_state = False
 
         get_status_attempt = 0
-        while get_status_attempt < 3:
+        for get_status_attempt in range(0, 2):
             try:
                 doorstate = requests.get(
                     'https://{host_uri}/{device_attribute_get_endpoint}'.format(
@@ -192,7 +192,7 @@ class MyQAPI:
                 )
 
                 doorstate.raise_for_status()
-                get_status_attempt = 3
+                break
 
             except requests.exceptions.HTTPError as ex:
                 get_status_attempt = get_status_attempt + 1
