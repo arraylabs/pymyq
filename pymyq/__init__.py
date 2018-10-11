@@ -199,7 +199,7 @@ class MyQAPI:
                 sleep(5)
 
         else:
-            self.logger.error("MyQ - API Error[get_status] %s", ex)
+            self.logger.error("MyQ - API Error[get_status] - Failed to get return from API after 3 attempts.")
             return False
         
         doorstate = doorstate.json()['AttributeValue']
