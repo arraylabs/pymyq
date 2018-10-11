@@ -175,7 +175,7 @@ class MyQAPI:
         garage_state = False
 
         get_status_attempt = 0
-        for get_status_attempt < 3:
+        while get_status_attempt < 3:
             try:
                 doorstate = requests.get(
                     'https://{host_uri}/{device_attribute_get_endpoint}'.format(
