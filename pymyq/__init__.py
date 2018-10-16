@@ -1,5 +1,6 @@
 import requests
 import logging
+from time import sleep
 
 
 class MyQAPI:
@@ -42,6 +43,7 @@ class MyQAPI:
     LOGIN_ENDPOINT = "api/v4/User/Validate"
     DEVICE_LIST_ENDPOINT = "api/v4/UserDeviceDetails/Get"
     DEVICE_SET_ENDPOINT = "api/v4/DeviceAttribute/PutDeviceAttribute"
+    DEVICE_ATTRIBUTE_GET_ENDPOINT = "api/v4/DeviceAttribute/getDeviceAttribute"
     USERAGENT = "Chamberlain/3773 (iPhone; iOS 11.0.3; Scale/2.00)"
 
     REQUEST_TIMEOUT = 3.0
@@ -56,6 +58,7 @@ class MyQAPI:
         '7': STATE_UNKNOWN,
         '8': STATE_TRANSITION,
         '9': STATE_OPEN,
+        '0': STATE_UNKNOWN
     }
 
     logger = logging.getLogger(__name__)
@@ -127,7 +130,7 @@ class MyQAPI:
             )
 
             devices.raise_for_status()
-            
+
         except requests.exceptions.HTTPError as ex:
             self.logger.error("MyQ - API Error[get_devices] %s", ex)
             return False
@@ -138,7 +141,7 @@ class MyQAPI:
         except KeyError:
             self.logger.error("MyQ - Login security token may have expired, will attempt relogin on next update")
             self._logged_in = False
-        
+
 
     def get_garage_doors(self):
         """List only MyQ garage door devices."""
@@ -164,20 +167,45 @@ class MyQAPI:
             return False;
 
     def get_status(self, device_id):
-        """List only MyQ garage door devices."""
-        devices = self.get_devices()
+        """Get only door states"""
+
+        if not self._logged_in:
+            self._logged_in = self.is_login_valid()
 
         garage_state = False
 
-        if devices != False:
-            for device in devices:
-                if device['MyQDeviceTypeName'] in self.SUPPORTED_DEVICE_TYPE_NAMES and device['MyQDeviceId'] == device_id:
-                    dev = {}
-                    for attribute in device['Attributes']:
-                        if attribute['AttributeDisplayName'] == 'doorstate':
-                            myq_garage_state = attribute['Value']
-                            garage_state = self.DOOR_STATE[myq_garage_state]
+        get_status_attempt = 0
+        for get_status_attempt in range(0, 2):
+            try:
+                doorstate = requests.get(
+                    'https://{host_uri}/{device_attribute_get_endpoint}'.format(
+                        host_uri=self.HOST_URI,
+                        device_attribute_get_endpoint=self.DEVICE_ATTRIBUTE_GET_ENDPOINT),
+                        headers={
+                            'MyQApplicationId': self.BRAND_MAPPINGS[self.brand][self.APP_ID],
+                            'SecurityToken': self.security_token
+                        },
+                        params={
+                            'AttributeName': 'doorstate',
+                            'MyQDeviceId': device_id
+                        }
+                )
+
+                doorstate.raise_for_status()
+                break
+
+            except requests.exceptions.HTTPError as ex:
+                get_status_attempt = get_status_attempt + 1
+                sleep(5)
+
+        else:
+            self.logger.error("MyQ - API Error[get_status] - Failed to get return from API after 3 attempts.")
+            return False
         
+        doorstate = doorstate.json()['AttributeValue']
+
+        garage_state = self.DOOR_STATE[doorstate]
+
         return garage_state
 
     def close_device(self, device_id):
