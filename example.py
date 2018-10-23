@@ -12,8 +12,7 @@ async def main() -> None:
     async with ClientSession() as websession:
         try:
             myq = await pymyq.login(
-                'bachya1208@gmail.com', 'b6Q29b62iAFoBRC8EPYw', 'chamberlain',
-                websession)
+                '<EMAIL>', '<PASSWORD>', '<BRAND>', websession)
 
             devices = await myq.get_devices()
             for idx, device in enumerate(devices):
