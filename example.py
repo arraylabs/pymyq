@@ -17,9 +17,6 @@ async def main() -> None:
 
             devices = await myq.get_devices()
             for idx, device in enumerate(devices):
-                if device.type != 'GarageDoorOpener':
-                    continue
-
                 print('Device #{0}: {1}'.format(idx + 1, device.name))
                 print('--------')
                 print('Brand: {0}'.format(device.brand))
@@ -32,7 +29,7 @@ async def main() -> None:
                 print('Opening the device...')
                 await device.open()
                 print('Current State: {0}'.format(device.state))
-                asyncio.sleep(3)
+                await asyncio.sleep(15)
                 print('Closing the device...')
                 await device.close()
                 print('Current State: {0}'.format(device.state))

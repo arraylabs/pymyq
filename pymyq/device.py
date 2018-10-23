@@ -33,14 +33,6 @@ STATE_MAP = {
     0: STATE_UNKNOWN
 }
 
-SUPPORTED_DEVICE_TYPE_NAMES = [
-    'Garage Door Opener WGDO',
-    'GarageDoorOpener',
-    'Gate',
-    'Gateway',
-    'VGDO',
-]
-
 
 class MyQDevice:
     """Define a generic MyQ device."""
@@ -51,10 +43,6 @@ class MyQDevice:
         self._brand = brand
         self._device_json = device_json
         self._request = request
-
-        self._device_type = device_json['MyQDeviceTypeName']
-        if self._device_type not in SUPPORTED_DEVICE_TYPE_NAMES:
-            _LOGGER.warning('Unknown device type: %s', self._device_type)
 
         try:
             raw_state = next(
@@ -100,7 +88,7 @@ class MyQDevice:
     @property
     def type(self) -> str:
         """Return the device type."""
-        return self._device_type
+        return self._device_json['MyQDeviceTypeName']
 
     @staticmethod
     def _coerce_state_from_string(value: Union[int, str]) -> str:
@@ -127,14 +115,6 @@ class MyQDevice:
                 'There was an error while setting the device state: %s',
                 set_state_resp['ErrorMessage'])
             return
-
-        # MyQ devices can sometimes take a moment to get started; for instance,
-        # garage doors will beep for a bit (to warn anyone nearby) before thea
-        # actual closing begins. Once we request a state change, wait for a bit
-        # before re-querying the status:
-        await asyncio.sleep(4)
-
-        await self.update()
 
     async def close(self) -> None:
         """Close the device."""

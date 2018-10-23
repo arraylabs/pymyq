@@ -5,7 +5,7 @@ from aiohttp import BasicAuth, ClientSession
 from aiohttp.client_exceptions import ClientError
 
 from .device import MyQDevice
-from .errors import RequestError, UnsupportedBrandError
+from .errors import MyQError, RequestError, UnsupportedBrandError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +34,13 @@ BRAND_MAPPINGS = {
             '3004cac4e920426c823fa6c2ecf0cc28ef7d4a7b74b6470f8f0d94d6c39eb718'
     }
 }
+
+SUPPORTED_DEVICE_TYPE_NAMES = [
+    'Garage Door Opener WGDO',
+    'GarageDoorOpener',
+    'Gate',
+    'VGDO',
+]
 
 
 class API:
@@ -90,14 +97,18 @@ class API:
                 'password': password
             })
 
+        if int(login_resp['ReturnCode']) != 0:
+            raise MyQError(login_resp['ErrorMessage'])
+
         self._security_token = login_resp['SecurityToken']
 
-    async def get_devices(self) -> list:
+    async def get_devices(self, covers_only: bool = True) -> list:
         """Get a list of all devices associated with the account."""
         devices_resp = await self._request('get', DEVICE_LIST_ENDPOINT)
         return [
-            MyQDevice(item, self._brand, self._request)
-            for item in devices_resp['Devices']
+            MyQDevice(device, self._brand, self._request)
+            for device in devices_resp['Devices'] if not covers_only
+            or device['MyQDeviceTypeName'] in SUPPORTED_DEVICE_TYPE_NAMES
         ]
 
 
