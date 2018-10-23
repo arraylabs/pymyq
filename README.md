@@ -1,46 +1,86 @@
 # Introduction
 
-This is a python module aiming to interact with the Chamberlain MyQ API.
+This is a Python 3.5+ module aiming to interact with the Chamberlain MyQ API.
 
 Code is licensed under the MIT license.
 
-Getting Started
-===============
+# Getting Started
 
-# Usage
+## Installation
 
 ```python
-from pymyq import MyQAPI as pymyq
-
-myq = pymyq(username, password, brand)
+pip install pymyq
 ```
 
-# Methods
+## Usage
 
-def is_supported_brand(self):
-"""Return true/false based on supported brands list and input."""
+`pymyq` starts within an [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
+`ClientSession`:
 
-def is_login_valid(self):
-"""Return true/false based on successful authentication."""
+```python
+import asyncio
 
-def get_devices(self):
-"""Return devices from API"""
+from aiohttp import ClientSession
 
-def get_garage_doors(self):
-"""Parse devices data and extract garage doors. Return garage doors."""
-       
-def get_status(self, device_id):
-"""Return current door status(open/closed)"""
 
-def close_device(self, device_id):
-"""Send request to close the door."""
+async def main() -> None:
+    """Create the aiohttp session and run."""
+    async with ClientSession() as websession:
+      # YOUR CODE HERE
 
-def open_device(self, device_id):
-"""Send request to open the door."""
 
-def set_state(self, device_id, state):
-"""Send request for request door state change."""
+asyncio.get_event_loop().run_until_complete(main())
+```
 
-### Disclaimer
+To get all MyQ devices associated with an account:
 
-The code here is based off of an unsupported API from [Chamberlain](http://www.chamberlain.com/) and is subject to change without notice. The authors claim no responsibility for damages to your garage door or property by use of the code within.
+```python
+import asyncio
+
+from aiohttp import ClientSession
+
+import pymyq
+
+
+async def main() -> None:
+    """Create the aiohttp session and run."""
+    async with ClientSession() as websession:
+      # Valid Brands: 'chamberlain', 'craftsman', 'liftmaster', 'merlin'
+      myq = await pymyq.login('<EMAIL>', '<PASSWORD>', '<BRAND>', websession)
+
+      # Return only cover devices:
+      devices = await myq.get_devices()
+
+      # Return *all* devices:
+      devices = await myq.get_devices(covers_only=False)
+
+
+asyncio.get_event_loop().run_until_complete(main())
+```
+
+## Device Properties
+
+* `brand`: the brand of the device
+* `device_id`: the device's MyQ ID
+* `parent_id`: the device's parent device's MyQ ID
+* `name`: the name of the device
+* `serial`: the serial number of the device
+* `state`: the device's current state
+* `type`: the type of MyQ device
+
+## Methods
+
+All of the routines on the `MyQDevice` class are coroutines and need to be
+`await`ed.
+
+* `close`: close the device
+* `open`: open the device
+* `update`: get the latest device state (which can then be accessed via the 
+`state` property)
+
+# Disclaimer
+
+The code here is based off of an unsupported API from
+[Chamberlain](http://www.chamberlain.com/) and is subject to change without
+notice. The authors claim no responsibility for damages to your garage door or
+property by use of the code within.
