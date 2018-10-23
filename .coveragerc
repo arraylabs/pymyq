@@ -1,6 +1,0 @@
-[run]
-source = pymyq
-
-omit =
-    pymyq/__version__.py
-
