@@ -99,22 +99,36 @@ class MyQDevice:
             _LOGGER.error('Unknown state: %s', value)
             return STATE_UNKNOWN
 
-    async def _set_state(self, state: int) -> None:
+    async def _set_state(self, state: int) -> bool:
         """Set the state of the device."""
-        set_state_resp = await self._request(
-            'put',
-            DEVICE_SET_ENDPOINT,
-            json={
-                'attributeName': 'desireddoorstate',
-                'myQDeviceId': self.device_id,
-                'AttributeValue': state,
-            })
+        for attempt in range(0, DEFAULT_UPDATE_RETRIES - 1):
+            try:
+                set_state_resp = await self._request(
+                    'put',
+                    DEVICE_SET_ENDPOINT,
+                    json={
+                        'attributeName': 'desireddoorstate',
+                        'myQDeviceId': self.device_id,
+                        'AttributeValue': state,
+                    })
+
+                break
+            except RequestError as err:
+                if attempt == DEFAULT_UPDATE_RETRIES - 1:
+                    _LOGGER.error('Setting state failed (and halting): %s',
+                                  err)
+                    return False
+
+                _LOGGER.error('Setting state failed; retrying')
+                await asyncio.sleep(4)
 
         if int(set_state_resp['ReturnCode']) != 0:
             _LOGGER.error(
                 'There was an error while setting the device state: %s',
                 set_state_resp['ErrorMessage'])
-            return
+            return False
+
+        return True
 
     async def close(self) -> None:
         """Close the device."""
@@ -124,7 +138,7 @@ class MyQDevice:
         """Open the device."""
         return await self._set_state(1)
 
-    async def update(self) -> None:
+    async def update(self) -> bool:
         """Update the device info from the MyQ cloud."""
         for attempt in range(0, DEFAULT_UPDATE_RETRIES - 1):
             try:
@@ -140,7 +154,7 @@ class MyQDevice:
             except RequestError as err:
                 if attempt == DEFAULT_UPDATE_RETRIES - 1:
                     _LOGGER.error('Update failed (and halting): %s', err)
-                    return
+                    return False
 
                 _LOGGER.error('Update failed; retrying')
                 await asyncio.sleep(4)
@@ -149,7 +163,9 @@ class MyQDevice:
             _LOGGER.error(
                 'There was an error while updating: %s',
                 update_resp['ErrorMessage'])
-            return
+            return False
 
         self._state = self._coerce_state_from_string(
             update_resp['AttributeValue'])
+
+        return True
