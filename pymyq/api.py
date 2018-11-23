@@ -1,7 +1,7 @@
 """Define the MyQ API."""
 import logging
 
-from aiohttp import BasicAuth, ClientSession
+from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
 from .device import MyQDevice
@@ -35,12 +35,17 @@ BRAND_MAPPINGS = {
     }
 }
 
-SUPPORTED_DEVICE_TYPE_NAMES = [
-    'Garage Door Opener WGDO',
-    'GarageDoorOpener',
-    'Gate',
-    'VGDO',
-]
+SUPPORTED_DEVICE_TYPE_NAMES = {
+    'covers': [
+        'Garage Door Opener WGDO',
+        'GarageDoorOpener',
+        'Gate',
+        'VGDO',
+    ],
+    'lights': [
+        'LampModule'
+    ]
+}
 
 
 class API:
@@ -108,7 +113,28 @@ class API:
         return [
             MyQDevice(device, self._brand, self._request)
             for device in devices_resp['Devices'] if not covers_only
-            or device['MyQDeviceTypeName'] in SUPPORTED_DEVICE_TYPE_NAMES
+            or device['MyQDeviceTypeName'] in
+            SUPPORTED_DEVICE_TYPE_NAMES['covers']
+        ]
+
+    async def get_covers(self) -> list:
+        """Get a list of all covers associated with the account."""
+        devices_resp = await self._request('get', DEVICE_LIST_ENDPOINT)
+        return [
+            MyQDevice(device, self._brand, self._request)
+            for device in devices_resp['Devices']
+            if device['MyQDeviceTypeName'] in
+            SUPPORTED_DEVICE_TYPE_NAMES['covers']
+        ]
+
+    async def get_lights(self) -> list:
+        """Get a list of all lights associated with the account."""
+        devices_resp = await self._request('get', DEVICE_LIST_ENDPOINT)
+        return [
+            MyQDevice(device, self._brand, self._request)
+            for device in devices_resp['Devices']
+            if device['MyQDeviceTypeName'] in
+            SUPPORTED_DEVICE_TYPE_NAMES['lights']
         ]
 
 

@@ -12,6 +12,8 @@ DEFAULT_UPDATE_RETRIES = 3
 DEVICE_ATTRIBUTE_GET_ENDPOINT = "api/v4/DeviceAttribute/getDeviceAttribute"
 DEVICE_SET_ENDPOINT = "api/v4/DeviceAttribute/PutDeviceAttribute"
 
+STATE_ON = 'on'
+STATE_OFF = 'off'
 STATE_OPEN = 'open'
 STATE_CLOSED = 'closed'
 STATE_STOPPED = 'stopped'
@@ -21,16 +23,30 @@ STATE_UNKNOWN = 'unknown'
 STATE_TRANSITION = 'transition'
 
 STATE_MAP = {
-    1: STATE_OPEN,
-    2: STATE_CLOSED,
-    3: STATE_STOPPED,
-    4: STATE_OPENING,
-    5: STATE_CLOSING,
-    6: STATE_UNKNOWN,
-    7: STATE_UNKNOWN,
-    8: STATE_TRANSITION,
-    9: STATE_OPEN,
-    0: STATE_UNKNOWN
+    'doorstate': {
+        1: STATE_OPEN,
+        2: STATE_CLOSED,
+        3: STATE_STOPPED,
+        4: STATE_OPENING,
+        5: STATE_CLOSING,
+        6: STATE_UNKNOWN,
+        7: STATE_UNKNOWN,
+        8: STATE_TRANSITION,
+        9: STATE_OPEN,
+        0: STATE_UNKNOWN
+    },
+    'lightstate': {
+        0: STATE_OFF,
+        1: STATE_ON,
+        2: STATE_UNKNOWN,
+        3: STATE_UNKNOWN,
+        4: STATE_UNKNOWN,
+        5: STATE_UNKNOWN,
+        6: STATE_UNKNOWN,
+        7: STATE_UNKNOWN,
+        8: STATE_UNKNOWN,
+        9: STATE_UNKNOWN
+    }
 }
 
 
@@ -44,13 +60,22 @@ class MyQDevice:
         self._device_json = device_json
         self._request = request
 
-        try:
-            raw_state = next(
-                attr['Value'] for attr in device_json['Attributes']
-                if attr['AttributeDisplayName'] == 'doorstate')
+        self._primary_attr = "UNKNOWN"
+        for attr in device_json['Attributes']:
+            if attr['AttributeDisplayName'] == 'doorstate':
+                self._primary_attr = attr['AttributeDisplayName']
+                break
+            elif attr['AttributeDisplayName'] == 'lightstate':
+                self._primary_attr = attr['AttributeDisplayName']
 
-            self._state = self._coerce_state_from_string(raw_state)
+        try:
+            self._raw_state = next(
+                attr['Value'] for attr in device_json['Attributes']
+                if attr['AttributeDisplayName'] == self._primary_attr)
+
+            self._state = self._coerce_state_from_string(self._raw_state)
         except StopIteration:
+            self._raw_state = STATE_UNKNOWN
             self._state = STATE_UNKNOWN
 
     @property
@@ -86,15 +111,19 @@ class MyQDevice:
         return self._state
 
     @property
+    def raw_state(self) -> str:
+        """Return the current RAW state of the device (if it exists)."""
+        return self._raw_state
+
+    @property
     def type(self) -> str:
         """Return the device type."""
         return self._device_json['MyQDeviceTypeName']
 
-    @staticmethod
-    def _coerce_state_from_string(value: Union[int, str]) -> str:
+    def _coerce_state_from_string(self, value: Union[int, str]) -> str:
         """Return a proper state from a string input."""
         try:
-            return STATE_MAP[int(value)]
+            return STATE_MAP[self._primary_attr][int(value)]
         except KeyError:
             _LOGGER.error('Unknown state: %s', value)
             return STATE_UNKNOWN
@@ -107,7 +136,7 @@ class MyQDevice:
                     'put',
                     DEVICE_SET_ENDPOINT,
                     json={
-                        'attributeName': 'desireddoorstate',
+                        'attributeName': 'desired' + self._primary_attr,
                         'myQDeviceId': self.device_id,
                         'AttributeValue': state,
                     })
@@ -138,6 +167,14 @@ class MyQDevice:
         """Open the device."""
         return await self._set_state(1)
 
+    async def turn_off(self) -> None:
+        """Turn off the device."""
+        return await self._set_state(0)
+
+    async def turn_on(self) -> None:
+        """Turn on the device."""
+        return await self._set_state(1)
+
     async def update(self) -> bool:
         """Update the device info from the MyQ cloud."""
         for attempt in range(0, DEFAULT_UPDATE_RETRIES - 1):
@@ -146,7 +183,7 @@ class MyQDevice:
                     'get',
                     DEVICE_ATTRIBUTE_GET_ENDPOINT,
                     params={
-                        'AttributeName': 'doorstate',
+                        'AttributeName': self._primary_attr,
                         'MyQDeviceId': self.device_id
                     })
 
@@ -165,7 +202,8 @@ class MyQDevice:
                 update_resp['ErrorMessage'])
             return False
 
+        self._raw_state = update_resp['AttributeValue']
         self._state = self._coerce_state_from_string(
-            update_resp['AttributeValue'])
+            self._raw_state)
 
         return True
