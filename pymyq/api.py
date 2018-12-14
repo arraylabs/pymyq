@@ -1,10 +1,10 @@
 """Define the MyQ API."""
 import logging
 
-from aiohttp import BasicAuth, ClientSession
+from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
-from .device import MyQDevice
+from .device import MyQDevice, MyQDoorDevice, MyQLightDevice
 from .errors import MyQError, RequestError, UnsupportedBrandError
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,13 +34,6 @@ BRAND_MAPPINGS = {
             '3004cac4e920426c823fa6c2ecf0cc28ef7d4a7b74b6470f8f0d94d6c39eb718'
     }
 }
-
-SUPPORTED_DEVICE_TYPE_NAMES = [
-    'Garage Door Opener WGDO',
-    'GarageDoorOpener',
-    'Gate',
-    'VGDO',
-]
 
 
 class API:
@@ -102,14 +95,28 @@ class API:
 
         self._security_token = login_resp['SecurityToken']
 
-    async def get_devices(self, covers_only: bool = True) -> list:
-        """Get a list of all devices associated with the account."""
+    async def _get_devices(self, device_class: 'MyQDevice' = None) -> list:
+        """Get a list of all devices associated with the account.
+        Optionally filtered by class.
+        """
         devices_resp = await self._request('get', DEVICE_LIST_ENDPOINT)
         return [
-            MyQDevice(device, self._brand, self._request)
-            for device in devices_resp['Devices'] if not covers_only
-            or device['MyQDeviceTypeName'] in SUPPORTED_DEVICE_TYPE_NAMES
+            MyQDevice.get_device(device, self._brand, self._request)
+            for device in devices_resp['Devices'] if not device_class
+            or MyQDevice.get_device_class(device) == device_class
         ]
+
+    async def get_devices(self, covers_only: bool = True) -> list:
+        """Get a list of all devices associated with the account."""
+        return await self._get_devices(MyQDoorDevice if covers_only else None)
+
+    async def get_covers(self) -> list:
+        """Get a list of all covers associated with the account."""
+        return await self._get_devices(MyQDoorDevice)
+
+    async def get_lights(self) -> list:
+        """Get a list of all lights associated with the account."""
+        return await self._get_devices(MyQLightDevice)
 
 
 async def login(

@@ -19,23 +19,47 @@ STATE_OPENING = 'opening'
 STATE_CLOSING = 'closing'
 STATE_UNKNOWN = 'unknown'
 STATE_TRANSITION = 'transition'
-
-STATE_MAP = {
-    1: STATE_OPEN,
-    2: STATE_CLOSED,
-    3: STATE_STOPPED,
-    4: STATE_OPENING,
-    5: STATE_CLOSING,
-    6: STATE_UNKNOWN,
-    7: STATE_UNKNOWN,
-    8: STATE_TRANSITION,
-    9: STATE_OPEN,
-    0: STATE_UNKNOWN
-}
+STATE_ON = 'on'
+STATE_OFF = 'off'
 
 
-class MyQDevice:
+class RegisterDeviceClasses(type):
+    def __init__(cls, name, bases, namespace):
+        """Create a registry to map MyQDeviceTypeName to device classes."""
+        super().__init__(name, bases, namespace)
+        if not hasattr(cls, 'registry'):
+            cls.registry = {}
+        for device_type_name in cls.SUPPORTED_DEVICE_TYPE_NAMES:
+            cls.registry[device_type_name] = cls
+
+
+class MyQDevice(object, metaclass=RegisterDeviceClasses):
     """Define a generic MyQ device."""
+
+    STATE_ATTRIBUTE = 'doorstate'
+    STATE_MAP = {
+        1: STATE_OPEN,
+        2: STATE_CLOSED,
+        3: STATE_STOPPED,
+        4: STATE_OPENING,
+        5: STATE_CLOSING,
+        6: STATE_UNKNOWN,
+        7: STATE_UNKNOWN,
+        8: STATE_TRANSITION,
+        9: STATE_OPEN,
+        0: STATE_UNKNOWN
+    }
+    SUPPORTED_DEVICE_TYPE_NAMES = []
+
+    @classmethod
+    def get_device_class(cls, device_json: dict) -> Callable:
+        return cls.registry.get(device_json['MyQDeviceTypeName'], cls)
+
+    @classmethod
+    def get_device(cls, device_json: dict, brand: str, request: Callable) -> 'MyQDevice':
+        """Factory method to return proper class based on MyQDeviceTypeName."""
+        device_class = cls.get_device_class(device_json)
+        return device_class(device_json, brand, request)
 
     def __init__(
             self, device_json: dict, brand: str, request: Callable) -> None:
@@ -47,7 +71,7 @@ class MyQDevice:
         try:
             raw_state = next(
                 attr['Value'] for attr in device_json['Attributes']
-                if attr['AttributeDisplayName'] == 'doorstate')
+                if attr['AttributeDisplayName'] == self.STATE_ATTRIBUTE)
 
             self._state = self._coerce_state_from_string(raw_state)
         except StopIteration:
@@ -90,11 +114,10 @@ class MyQDevice:
         """Return the device type."""
         return self._device_json['MyQDeviceTypeName']
 
-    @staticmethod
-    def _coerce_state_from_string(value: Union[int, str]) -> str:
+    def _coerce_state_from_string(self, value: Union[int, str]) -> str:
         """Return a proper state from a string input."""
         try:
-            return STATE_MAP[int(value)]
+            return self.STATE_MAP[int(value)]
         except KeyError:
             _LOGGER.error('Unknown state: %s', value)
             return STATE_UNKNOWN
@@ -107,7 +130,7 @@ class MyQDevice:
                     'put',
                     DEVICE_SET_ENDPOINT,
                     json={
-                        'attributeName': 'desireddoorstate',
+                        'attributeName': 'desired' + self.STATE_ATTRIBUTE,
                         'myQDeviceId': self.device_id,
                         'AttributeValue': state,
                     })
@@ -130,14 +153,6 @@ class MyQDevice:
 
         return True
 
-    async def close(self) -> None:
-        """Close the device."""
-        return await self._set_state(0)
-
-    async def open(self) -> None:
-        """Open the device."""
-        return await self._set_state(1)
-
     async def update(self) -> bool:
         """Update the device info from the MyQ cloud."""
         for attempt in range(0, DEFAULT_UPDATE_RETRIES - 1):
@@ -146,7 +161,7 @@ class MyQDevice:
                     'get',
                     DEVICE_ATTRIBUTE_GET_ENDPOINT,
                     params={
-                        'AttributeName': 'doorstate',
+                        'AttributeName': self.STATE_ATTRIBUTE,
                         'MyQDeviceId': self.device_id
                     })
 
@@ -169,3 +184,43 @@ class MyQDevice:
             update_resp['AttributeValue'])
 
         return True
+
+
+class MyQDoorDevice(MyQDevice):
+    """Define a door MyQ device."""
+
+    SUPPORTED_DEVICE_TYPE_NAMES = [
+        'Garage Door Opener WGDO',
+        'GarageDoorOpener',
+        'Gate',
+        'VGDO',
+    ]
+
+    async def close(self) -> None:
+        """Close the device."""
+        await self._set_state(0)
+
+    async def open(self) -> None:
+        """Open the device."""
+        await self._set_state(1)
+
+
+class MyQLightDevice(MyQDevice):
+    """Define a light MyQ device."""
+
+    STATE_ATTRIBUTE = 'lightstate'
+    STATE_MAP = {
+        0: STATE_OFF,
+        1: STATE_ON,
+    }
+    SUPPORTED_DEVICE_TYPE_NAMES = [
+        'LampModule',
+    ]
+
+    async def turn_off(self) -> None:
+        """Turn off the device."""
+        await self._set_state(0)
+
+    async def turn_on(self) -> None:
+        """Turn on the device."""
+        await self._set_state(1)
