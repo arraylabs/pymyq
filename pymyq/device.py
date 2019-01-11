@@ -1,13 +1,11 @@
 """Define a generic MyQ device."""
-import asyncio
 import logging
-from typing import Callable, Union
+from datetime import datetime, timedelta
+from typing import Union
 
 from .errors import RequestError
 
 _LOGGER = logging.getLogger(__name__)
-
-DEFAULT_UPDATE_RETRIES = 3
 
 DEVICE_ATTRIBUTE_GET_ENDPOINT = "api/v4/DeviceAttribute/getDeviceAttribute"
 DEVICE_SET_ENDPOINT = "api/v4/DeviceAttribute/PutDeviceAttribute"
@@ -37,21 +35,14 @@ STATE_MAP = {
 class MyQDevice:
     """Define a generic MyQ device."""
 
-    def __init__(
-            self, device_json: dict, brand: str, request: Callable) -> None:
+    def __init__(self, device: dict, brand: str, api) -> None:
         """Initialize."""
         self._brand = brand
-        self._device_json = device_json
-        self._request = request
-
-        try:
-            raw_state = next(
-                attr['Value'] for attr in device_json['Attributes']
-                if attr['AttributeDisplayName'] == 'doorstate')
-
-            self._state = self._coerce_state_from_string(raw_state)
-        except StopIteration:
-            self._state = STATE_UNKNOWN
+        self._device = device
+        self._device_json = device['device_info']
+        self._device_id = self._device_json['MyQDeviceId']
+        self.api = api
+        self.next_allowed_update = None
 
     @property
     def brand(self) -> str:
@@ -61,7 +52,7 @@ class MyQDevice:
     @property
     def device_id(self) -> int:
         """Return the device ID."""
-        return self._device_json['MyQDeviceId']
+        return self._device_id
 
     @property
     def parent_id(self) -> Union[None, int]:
@@ -72,23 +63,58 @@ class MyQDevice:
     def name(self) -> str:
         """Return the device name."""
         return next(
-            attr['Value'] for attr in self._device_json['Attributes']
-            if attr['AttributeDisplayName'] == 'desc')
+            attr['Value'] for attr in self._device_json.get('Attributes', [])
+            if attr.get('AttributeDisplayName') == 'desc')
+
+    @property
+    def available(self) -> bool:
+        """Return if device is online or not."""
+        return next(
+            attr['Value'] for attr in self._device_json.get('Attributes', [])
+            if attr.get('AttributeDisplayName') == 'online') == "True"
 
     @property
     def serial(self) -> str:
         """Return the device serial number."""
-        return self._device_json['SerialNumber']
+        return self._device_json.get('SerialNumber')
+
+    @property
+    def open_allowed(self) -> bool:
+        """Door can be opened unattended."""
+        return next(
+            attr['Value'] for attr in self._device_json.get('Attributes', [])
+            if attr.get('AttributeDisplayName') == 'isunattendedopenallowed')\
+            == "1"
+
+    @property
+    def close_allowed(self) -> bool:
+        """Door can be closed unattended."""
+        return next(
+            attr['Value'] for attr in self._device_json.get('Attributes', [])
+            if attr.get('AttributeDisplayName') == 'isunattendedcloseallowed')\
+            == "1"
 
     @property
     def state(self) -> str:
         """Return the current state of the device (if it exists)."""
-        return self._state
+        return self._coerce_state_from_string(
+            next(
+                attr['Value'] for attr in self._device_json.get(
+                    'Attributes', [])
+                if attr.get('AttributeDisplayName') == 'doorstate'))
+
+    def _update_state(self, value: str) -> None:
+        """Update state temporary during open or close."""
+        attribute = next(attr for attr in self._device['device_info'].get(
+                        'Attributes', []) if attr.get('AttributeDisplayName')
+                         == 'doorstate')
+        if attribute is not None:
+            attribute['Value'] = value
 
     @property
     def type(self) -> str:
         """Return the device type."""
-        return self._device_json['MyQDeviceTypeName']
+        return self._device_json.get('MyQDeviceTypeName')
 
     @staticmethod
     def _coerce_state_from_string(value: Union[int, str]) -> str:
@@ -99,73 +125,74 @@ class MyQDevice:
             _LOGGER.error('Unknown state: %s', value)
             return STATE_UNKNOWN
 
+    # pylint: disable=protected-access
     async def _set_state(self, state: int) -> bool:
         """Set the state of the device."""
-        for attempt in range(0, DEFAULT_UPDATE_RETRIES - 1):
-            try:
-                set_state_resp = await self._request(
-                    'put',
-                    DEVICE_SET_ENDPOINT,
-                    json={
-                        'attributeName': 'desireddoorstate',
-                        'myQDeviceId': self.device_id,
-                        'AttributeValue': state,
-                    })
+        try:
+            set_state_resp = await self.api._request(
+                'put',
+                DEVICE_SET_ENDPOINT,
+                json={
+                    'attributeName': 'desireddoorstate',
+                    'myQDeviceId': self.device_id,
+                    'AttributeValue': state,
+                })
+        except RequestError as err:
+            _LOGGER.error('%s: Setting state failed (and halting): %s',
+                          self.name, err)
+            return False
 
-                break
-            except RequestError as err:
-                if attempt == DEFAULT_UPDATE_RETRIES - 1:
-                    _LOGGER.error('Setting state failed (and halting): %s',
-                                  err)
-                    return False
-
-                _LOGGER.error('Setting state failed; retrying')
-                await asyncio.sleep(4)
-
-        if int(set_state_resp['ReturnCode']) != 0:
+        if int(set_state_resp.get('ReturnCode', 1)) != 0:
             _LOGGER.error(
-                'There was an error while setting the device state: %s',
-                set_state_resp['ErrorMessage'])
+                '%s: Error setting the device state: %s', self.name,
+                set_state_resp.get('ErrorMessage', 'Unknown Error'))
             return False
 
         return True
 
-    async def close(self) -> None:
+    async def close(self) -> bool:
         """Close the device."""
-        return await self._set_state(0)
-
-    async def open(self) -> None:
-        """Open the device."""
-        return await self._set_state(1)
-
-    async def update(self) -> bool:
-        """Update the device info from the MyQ cloud."""
-        for attempt in range(0, DEFAULT_UPDATE_RETRIES - 1):
-            try:
-                update_resp = await self._request(
-                    'get',
-                    DEVICE_ATTRIBUTE_GET_ENDPOINT,
-                    params={
-                        'AttributeName': 'doorstate',
-                        'MyQDeviceId': self.device_id
-                    })
-
-                break
-            except RequestError as err:
-                if attempt == DEFAULT_UPDATE_RETRIES - 1:
-                    _LOGGER.error('Update failed (and halting): %s', err)
-                    return False
-
-                _LOGGER.error('Update failed; retrying')
-                await asyncio.sleep(4)
-
-        if int(update_resp['ReturnCode']) != 0:
-            _LOGGER.error(
-                'There was an error while updating: %s',
-                update_resp['ErrorMessage'])
+        _LOGGER.debug('%s: Sending close command', self.name)
+        if not await self._set_state(0):
             return False
 
-        self._state = self._coerce_state_from_string(
-            update_resp['AttributeValue'])
+        # Do not allow update of this device's state for 10 seconds.
+        self.next_allowed_update = datetime.utcnow() + timedelta(seconds=10)
 
+        # Ensure state is closed or closing.
+        if self.state not in (STATE_CLOSED, STATE_CLOSING):
+            # Set state to closing.
+            self._update_state('5')
+            self._device_json = self._device['device_info']
+
+        _LOGGER.debug('%s: Close command send', self.name)
         return True
+
+    async def open(self) -> bool:
+        """Open the device."""
+        _LOGGER.debug('%s: Sending open command', self.name)
+        if not await self._set_state(1):
+            return False
+
+        # Do not allow update of this device's state for 5 seconds.
+        self.next_allowed_update = datetime.utcnow() + timedelta(seconds=5)
+
+        # Ensure state is open or opening
+        if self.state not in (STATE_OPEN, STATE_OPENING):
+            # Set state to opening
+            self._update_state('4')
+            self._device_json = self._device['device_info']
+
+        _LOGGER.debug('%s: Open command send', self.name)
+        return True
+
+    # pylint: disable=protected-access
+    async def update(self) -> None:
+        """Retrieve updated device state."""
+        if self.next_allowed_update is not None and \
+                datetime.utcnow() < self.next_allowed_update:
+            return
+
+        self.next_allowed_update = None
+        await self.api._update_device_state()
+        self._device_json = self._device['device_info']
