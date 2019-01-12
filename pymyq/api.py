@@ -98,13 +98,20 @@ class API:
                         resp.raise_for_status()
                         return await resp.json(content_type=None)
                 except (asyncio.TimeoutError, ClientError) as err:
+                    if isinstance(err, ClientError):
+                        type_exception = 'ClientError'
+                    else:
+                        type_exception = 'TimeOut'
+
                     if attempt == DEFAULT_UPDATE_RETRIES - 1:
                         raise RequestError(
-                            'Error requesting data from {0}: {1}'.format(
-                                endpoint, err))
-                    _LOGGER.error('Request for %s failed; retrying. %s',
-                                  endpoint, err)
+                            '{} requesting data from {}: {}'.format(
+                                type_exception, endpoint, err))
+
+                    _LOGGER.warning('%s for %s; retrying: %s',
+                                  type_exception, endpoint, err)
                     await asyncio.sleep(5)
+
         _LOGGER.debug('Request to %s completed', url)
 
     async def _update_device_state(self):
