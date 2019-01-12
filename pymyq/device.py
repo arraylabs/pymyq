@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Union
 
+from .api import API
 from .errors import RequestError
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ STATE_MAP = {
 class MyQDevice:
     """Define a generic MyQ device."""
 
-    def __init__(self, device: dict, brand: str, api) -> None:
+    def __init__(self, device: dict, brand: str, api: API) -> None:
         """Initialize."""
         self._brand = brand
         self._device = device

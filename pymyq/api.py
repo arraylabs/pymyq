@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
-from .device import MyQDevice
 from .errors import MyQError, RequestError, UnsupportedBrandError
 
 _LOGGER = logging.getLogger(__name__)
@@ -109,18 +108,18 @@ class API:
                                 type_exception, endpoint, err))
 
                     _LOGGER.warning('%s for %s; retrying: %s',
-                                  type_exception, endpoint, err)
+                                    type_exception, endpoint, err)
                     await asyncio.sleep(5)
 
         _LOGGER.debug('Request to %s completed', url)
 
-    async def _update_device_state(self):
+    async def _update_device_state(self) -> None:
         async with self._update_lock:
             if datetime.utcnow() - self._last_update >\
                     MIN_TIME_BETWEEN_UPDATES:
                 await self._get_device_states()
 
-    async def _get_device_states(self):
+    async def _get_device_states(self) -> bool:
         _LOGGER.debug('Retrieving new device states')
         try:
             devices_resp = await self._request('get', DEVICE_LIST_ENDPOINT)
@@ -136,8 +135,9 @@ class API:
 
         self._store_device_states(devices_resp.get('Devices', []))
         _LOGGER.debug('New device states retrieved')
+        return True
 
-    def _store_device_states(self, devices):
+    def _store_device_states(self, devices: dict) -> None:
         for device in self._devices:
             myq_device = next(
                 (element for element in devices
@@ -168,6 +168,8 @@ class API:
 
     async def get_devices(self, covers_only: bool = True) -> list:
         """Get a list of all devices associated with the account."""
+        from .device import MyQDevice
+
         _LOGGER.debug('Retrieving list of devices')
         devices_resp = await self._request('get', DEVICE_LIST_ENDPOINT)
         # print(json.dumps(devices_resp, indent=4))
