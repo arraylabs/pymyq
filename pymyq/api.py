@@ -62,7 +62,6 @@ class API:
         self._last_update = None
         self._websession = websession
         self._update_lock = asyncio.Lock()
-        self._request_lock = asyncio.Lock()
 
     async def _request(
             self,
@@ -88,34 +87,33 @@ class API:
 
         start_request_time = datetime.time(datetime.now())
         _LOGGER.debug('%s Initiating request to %s', start_request_time, url)
-        async with self._request_lock:
-            timeout = DEFAULT_TIMEOUT
-            # Repeat twice amount of max requests retries for timeout errors.
-            for attempt in range(0, (DEFAULT_REQUEST_RETRIES * 2) - 1):
-                try:
-                    async with self._websession.request(
-                            method, url, headers=headers, params=params,
-                            data=data, json=json, timeout=timeout,
-                            **kwargs) as resp:
-                        resp.raise_for_status()
-                        return await resp.json(content_type=None)
-                except asyncio.TimeoutError:
-                    timeout = timeout * 2
-                    _LOGGER.warning('%s Timeout requesting from %s',
-                                    start_request_time, endpoint)
-                except ClientError as err:
-                    if attempt == DEFAULT_REQUEST_RETRIES - 1:
-                        raise RequestError('{} Client Error while requesting '
-                                           'data from {}: {}'.format(
-                                               start_request_time, endpoint,
-                                               err))
+        timeout = DEFAULT_TIMEOUT
+        # Repeat twice amount of max requests retries for timeout errors.
+        for attempt in range(0, (DEFAULT_REQUEST_RETRIES * 2) - 1):
+            try:
+                async with self._websession.request(
+                        method, url, headers=headers, params=params,
+                        data=data, json=json, timeout=timeout,
+                        **kwargs) as resp:
+                    resp.raise_for_status()
+                    return await resp.json(content_type=None)
+            except asyncio.TimeoutError:
+                timeout = timeout * 2
+                _LOGGER.warning('%s Timeout requesting from %s',
+                                start_request_time, endpoint)
+            except ClientError as err:
+                if attempt == DEFAULT_REQUEST_RETRIES - 1:
+                    raise RequestError('{} Client Error while requesting '
+                                       'data from {}: {}'.format(
+                                           start_request_time, endpoint,
+                                           err))
 
-                    _LOGGER.warning('%s Error requesting from %s; retrying: '
-                                    '%s', start_request_time, endpoint, err)
-                    await asyncio.sleep(5)
+                _LOGGER.warning('%s Error requesting from %s; retrying: '
+                                '%s', start_request_time, endpoint, err)
+                await asyncio.sleep(5)
 
-            raise RequestError('{} Constant timeouts while requesting data '
-                               'from {}'.format(start_request_time, endpoint))
+        raise RequestError('{} Constant timeouts while requesting data '
+                           'from {}'.format(start_request_time, endpoint))
 
     async def _update_device_state(self) -> None:
         async with self._update_lock:
