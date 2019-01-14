@@ -14,10 +14,10 @@ API_BASE = 'https://myqexternal.myqdevice.com'
 LOGIN_ENDPOINT = "api/v4/User/Validate"
 DEVICE_LIST_ENDPOINT = "api/v4/UserDeviceDetails/Get"
 
-DEFAULT_TIMEOUT = 10
-DEFAULT_UPDATE_RETRIES = 3
+DEFAULT_TIMEOUT = 1
+DEFAULT_REQUEST_RETRIES = 3
 
-MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=DEFAULT_TIMEOUT)
+MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=5)
 
 DEFAULT_USER_AGENT = "Chamberlain/3773 (iPhone; iOS 11.0.3; Scale/2.00)"
 
@@ -86,32 +86,36 @@ class API:
             'User-Agent': DEFAULT_USER_AGENT,
         })
 
-        _LOGGER.debug('Initiating request to %s', url)
+        start_request_time = datetime.time(datetime.now())
+        _LOGGER.debug('%s Initiating request to %s', start_request_time, url)
         async with self._request_lock:
-            for attempt in range(0, DEFAULT_UPDATE_RETRIES - 1):
+            timeout = DEFAULT_TIMEOUT
+            # Repeat twice amount of max requests retries for timeout errors.
+            for attempt in range(0, (DEFAULT_REQUEST_RETRIES * 2) - 1):
                 try:
                     async with self._websession.request(
                             method, url, headers=headers, params=params,
-                            data=data, json=json, timeout=DEFAULT_TIMEOUT,
+                            data=data, json=json, timeout=timeout,
                             **kwargs) as resp:
                         resp.raise_for_status()
                         return await resp.json(content_type=None)
-                except (asyncio.TimeoutError, ClientError) as err:
-                    if isinstance(err, ClientError):
-                        type_exception = 'ClientError'
-                    else:
-                        type_exception = 'TimeOut'
+                except asyncio.TimeoutError:
+                    timeout = timeout * 2
+                    _LOGGER.warning('%s Timeout requesting from %s',
+                                    start_request_time, endpoint)
+                except ClientError as err:
+                    if attempt == DEFAULT_REQUEST_RETRIES - 1:
+                        raise RequestError('{} Client Error while requesting '
+                                           'data from {}: {}'.format(
+                                               start_request_time, endpoint,
+                                               err))
 
-                    if attempt == DEFAULT_UPDATE_RETRIES - 1:
-                        raise RequestError(
-                            '{} requesting data from {}: {}'.format(
-                                type_exception, endpoint, err))
-
-                    _LOGGER.warning('%s for %s; retrying: %s',
-                                    type_exception, endpoint, err)
+                    _LOGGER.warning('%s Error requesting from %s; retrying: '
+                                    '%s', start_request_time, endpoint, err)
                     await asyncio.sleep(5)
 
-        _LOGGER.debug('Request to %s completed', url)
+            raise RequestError('{} Constant timeouts while requesting data '
+                               'from {}'.format(start_request_time, endpoint))
 
     async def _update_device_state(self) -> None:
         async with self._update_lock:
