@@ -70,9 +70,15 @@ class MyQDevice:
     @property
     def available(self) -> bool:
         """Return if device is online or not."""
-        return next(
-            attr['Value'] for attr in self._device_json.get('Attributes', [])
-            if attr.get('AttributeDisplayName') == 'online') == "True"
+        # Both ability to retrieve state from MyQ cloud AND device itself has
+        # to be online.
+        is_available = self.api.online and \
+            next(
+                attr['Value'] for attr in
+                self._device_json.get('Attributes', [])
+                if attr.get('AttributeDisplayName') == 'online') == "True"
+
+        return is_available
 
     @property
     def serial(self) -> str:
@@ -107,8 +113,8 @@ class MyQDevice:
     def _update_state(self, value: str) -> None:
         """Update state temporary during open or close."""
         attribute = next(attr for attr in self._device['device_info'].get(
-                        'Attributes', []) if attr.get('AttributeDisplayName')
-                         == 'doorstate')
+            'Attributes', []) if attr.get(
+                'AttributeDisplayName') == 'doorstate')
         if attribute is not None:
             attribute['Value'] = value
 
@@ -141,6 +147,9 @@ class MyQDevice:
         except RequestError as err:
             _LOGGER.error('%s: Setting state failed (and halting): %s',
                           self.name, err)
+            return False
+
+        if set_state_resp is None:
             return False
 
         if int(set_state_resp.get('ReturnCode', 1)) != 0:
