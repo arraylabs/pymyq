@@ -2,6 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
@@ -57,11 +58,16 @@ class API:
             raise UnsupportedBrandError('Unknown brand: {0}'.format(brand))
 
         self._brand = brand
+        self._websession = websession
+
+        self._credentials = None
         self._security_token = None
         self._devices = []
         self._last_update = None
-        self._websession = websession
+        self.online = False
+
         self._update_lock = asyncio.Lock()
+        self._security_token_lock = asyncio.Lock()
 
     async def _request(
             self,
@@ -72,8 +78,16 @@ class API:
             params: dict = None,
             data: dict = None,
             json: dict = None,
-            **kwargs) -> dict:
-        """Make a request."""
+            login_request: bool = False,
+            **kwargs) -> Optional[dict]:
+
+        # Get a security token if we do not have one AND this request
+        # is not to get a security token.
+        if self._security_token is None and not login_request:
+            await self._get_security_token()
+            if self._security_token is None:
+                return None
+
         url = '{0}/{1}'.format(API_BASE, endpoint)
 
         if not headers:
@@ -98,8 +112,10 @@ class API:
                     resp.raise_for_status()
                     return await resp.json(content_type=None)
             except asyncio.TimeoutError:
-                timeout = timeout * 2
-                _LOGGER.warning('%s Timeout requesting from %s',
+                # Start increasing timeout if already tried twice..
+                if attempt > 1:
+                    timeout = timeout * 2
+                _LOGGER.debug('%s Timeout requesting from %s',
                                 start_request_time, endpoint)
             except ClientError as err:
                 if attempt == DEFAULT_REQUEST_RETRIES - 1:
@@ -119,7 +135,7 @@ class API:
         async with self._update_lock:
             if datetime.utcnow() - self._last_update >\
                     MIN_TIME_BETWEEN_UPDATES:
-                await self._get_device_states()
+                self.online = await self._get_device_states()
 
     async def _get_device_states(self) -> bool:
         _LOGGER.debug('Retrieving new device states')
@@ -129,10 +145,21 @@ class API:
             _LOGGER.error('Getting device states failed: %s', err)
             return False
 
-        if int(devices_resp.get('ReturnCode', 1)) != 0:
-            _LOGGER.error(
-                'Error while retrieving states: %s',
-                devices_resp.get('ErrorMessage', 'Unknown Error'))
+        if devices_resp is None:
+            return False
+
+        return_code = int(devices_resp.get('ReturnCode', 1))
+
+        if return_code != 0:
+            if return_code == -3333:
+                # Login error, need to retrieve a new token next time.
+                self._security_token = None
+                _LOGGER.debug('Security token expired')
+            else:
+                _LOGGER.error(
+                    'Error %s while retrieving states: %s',
+                    devices_resp.get('ReturnCode'),
+                    devices_resp.get('ErrorMessage', 'Unknown Error'))
             return False
 
         self._store_device_states(devices_resp.get('Devices', []))
@@ -153,20 +180,39 @@ class API:
 
     async def authenticate(self, username: str, password: str) -> None:
         """Authenticate against the API."""
-        _LOGGER.debug('Starting authentication')
-        login_resp = await self._request(
-            'post',
-            LOGIN_ENDPOINT,
-            json={
-                'username': username,
-                'password': password
-            })
+        self._credentials = {
+            'username': username,
+            'password': password,
+        }
 
-        if int(login_resp['ReturnCode']) != 0:
-            raise MyQError(login_resp['ErrorMessage'])
+        await self._get_security_token()
 
-        self._security_token = login_resp['SecurityToken']
-        _LOGGER.debug('Authentication completed')
+    async def _get_security_token(self) -> None:
+        """Request a security token."""
+        _LOGGER.debug('Requesting security token.')
+        if self._credentials is None:
+            return
+
+        # Make sure only 1 request can be sent at a time.
+        async with self._security_token_lock:
+            # Confirm there is still no security token.
+            if self._security_token is None:
+                login_resp = await self._request(
+                    'post',
+                    LOGIN_ENDPOINT,
+                    json=self._credentials,
+                    login_request=True,
+                )
+
+                return_code = int(login_resp.get('ReturnCode', 1))
+                if return_code != 0:
+                    if return_code == 203:
+                        # Invalid username or password.
+                        _LOGGER.debug('Invalid username or password')
+                        self._credentials = None
+                    raise MyQError(login_resp['ErrorMessage'])
+
+                self._security_token = login_resp['SecurityToken']
 
     async def get_devices(self, covers_only: bool = True) -> list:
         """Get a list of all devices associated with the account."""
@@ -177,6 +223,9 @@ class API:
         # print(json.dumps(devices_resp, indent=4))
 
         device_list = []
+        if devices_resp is None:
+            return device_list
+
         for device in devices_resp['Devices']:
             if not covers_only or \
                device['MyQDeviceTypeName'] in SUPPORTED_DEVICE_TYPE_NAMES:
