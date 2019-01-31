@@ -1,6 +1,7 @@
 """Run an example script to quickly test any MyQ account."""
 import asyncio
 import logging
+import json
 
 from aiohttp import ClientSession
 
@@ -19,6 +20,12 @@ MYQ_ACCOUNT_PASSWORD = '<PASSWORD>'
 # merlin
 MYQ_BRAND = '<BRAND>'
 LOGLEVEL = 'ERROR'
+
+# Set JSON_DUMP to True to dump all the device information retrieved,
+# this can be helpful to determine what else is available.
+# Set JSON_DUMP to False to open/close the doors instead. i.e.:
+# JSON_DUMP = False
+JSON_DUMP = True
 
 
 async def main() -> None:
@@ -50,39 +57,42 @@ async def main() -> None:
                 print('Unattended Close: {0}'.format(device.close_allowed))
                 print()
                 print('Current State: {0}'.format(device.state))
-                if device.state != STATE_OPEN:
-                    print('Opening the device...')
-                    await device.open()
-                    print('    0 Current State: {0}'.format(device.state))
-                    for waited in range(1, 30):
-                        if device.state == STATE_OPEN:
-                            break
-                        await asyncio.sleep(1)
+                if JSON_DUMP:
+                    print(json.dumps(device._device, indent=4))
+                else:
+                    if device.state != STATE_OPEN:
+                        print('Opening the device...')
+                        await device.open()
+                        print('    0 Current State: {0}'.format(device.state))
+                        for waited in range(1, 30):
+                            if device.state == STATE_OPEN:
+                                break
+                            await asyncio.sleep(1)
+                            await device.update()
+                            print('    {} Current State: {}'.format(
+                                waited, device.state))
+
+                        await asyncio.sleep(10)
                         await device.update()
-                        print('    {} Current State: {}'.format(
-                            waited, device.state))
+                        print()
+                        print('Current State: {0}'.format(device.state))
 
-                    await asyncio.sleep(10)
-                    await device.update()
-                    print()
-                    print('Current State: {0}'.format(device.state))
+                    if device.state != STATE_CLOSED:
+                        print('Closing the device...')
+                        await device.close()
+                        print('    0 Current State: {0}'.format(device.state))
+                        for waited in range(1, 30):
+                            if device.state == STATE_CLOSED:
+                                break
+                            await asyncio.sleep(1)
+                            await device.update()
+                            print('    {} Current State: {}'.format(
+                                waited, device.state))
 
-                if device.state != STATE_CLOSED:
-                    print('Closing the device...')
-                    await device.close()
-                    print('    0 Current State: {0}'.format(device.state))
-                    for waited in range(1, 30):
-                        if device.state == STATE_CLOSED:
-                            break
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(10)
                         await device.update()
-                        print('    {} Current State: {}'.format(
-                            waited, device.state))
-
-                    await asyncio.sleep(10)
-                    await device.update()
-                    print()
-                    print('Current State: {0}'.format(device.state))
+                        print()
+                        print('Current State: {0}'.format(device.state))
         except MyQError as err:
             print(err)
 
