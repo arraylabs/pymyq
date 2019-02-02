@@ -64,9 +64,12 @@ asyncio.get_event_loop().run_until_complete(main())
 * `device_id`: the device's MyQ ID
 * `parent_id`: the device's parent device's MyQ ID
 * `name`: the name of the device
+* `available`: if device is online
 * `serial`: the serial number of the device
 * `state`: the device's current state
 * `type`: the type of MyQ device
+* `open_allowed`: if device can be opened unattended
+* `close_allowed`: if device can be closed unattended
 
 ## Methods
 
@@ -76,7 +79,8 @@ All of the routines on the `MyQDevice` class are coroutines and need to be
 * `close`: close the device
 * `open`: open the device
 * `update`: get the latest device state (which can then be accessed via the 
-`state` property)
+`state` property). Retrieval of state from cloud is will only be done if more then 5 seconds has elapsed since last 
+request. State for all devices is retrieved through (1) request.  
 
 # Disclaimer
 
