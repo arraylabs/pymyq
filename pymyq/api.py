@@ -101,6 +101,7 @@ class API:
         self._websession = None
         await temp_websession.close()
         await asyncio.sleep(0)
+        _LOGGER.debug('Connections closed')
 
     async def _request(
             self,
