@@ -80,7 +80,8 @@ All of the routines on the `MyQDevice` class are coroutines and need to be
 * `open`: open the device
 * `update`: get the latest device state (which can then be accessed via the 
 `state` property). Retrieval of state from cloud is will only be done if more then 5 seconds has elapsed since last 
-request. State for all devices is retrieved through (1) request.  
+request. State for all devices is retrieved through (1) request.
+* `close_connection`: close web session connection, will only close the web session if none was provided initially  
 
 # Disclaimer
 

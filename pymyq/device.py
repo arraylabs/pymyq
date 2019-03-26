@@ -206,3 +206,7 @@ class MyQDevice:
         self.next_allowed_update = None
         await self.api._update_device_state()
         self._device_json = self._device['device_info']
+
+    async def close_connection(self):
+        """Close the web session connection with MyQ"""
+        await self.api.close_websession()

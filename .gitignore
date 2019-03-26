@@ -4,5 +4,5 @@ pymyq.egg-info
 .DS_Store
 .idea/
 __pycache__/
-venv/
+venv*/
 
