@@ -52,13 +52,14 @@ SUPPORTED_DEVICE_TYPE_NAMES = [
 class API:
     """Define a class for interacting with the MyQ iOS App API."""
 
-    def __init__(self, brand: str, websession: ClientSession) -> None:
+    def __init__(self, brand: str, websession: ClientSession = None) -> None:
         """Initialize the API object."""
         if brand not in BRAND_MAPPINGS:
             raise UnsupportedBrandError('Unknown brand: {0}'.format(brand))
 
         self._brand = brand
         self._websession = websession
+        self._supplied_websession = True
 
         self._credentials = None
         self._security_token = None
@@ -68,6 +69,38 @@ class API:
 
         self._update_lock = asyncio.Lock()
         self._security_token_lock = asyncio.Lock()
+
+    def _create_websession(self):
+        """Create a web session."""
+        from socket import AF_INET
+        from aiohttp import ClientTimeout, TCPConnector
+
+        _LOGGER.debug('Creating web session')
+        conn = TCPConnector(
+            family=AF_INET,
+            limit_per_host=5,
+            enable_cleanup_closed=True,
+        )
+
+        # Create session object.
+        session_timeout = ClientTimeout(connect=10)
+        self._websession = ClientSession(connector=conn,
+                                         timeout=session_timeout)
+        self._supplied_websession = False
+
+    async def close_websession(self):
+        """Close web session if not already closed and created by us."""
+        # We do not close the web session if it was provided.
+        if self._supplied_websession or self._websession is None:
+            return
+
+        _LOGGER.debug('Closing connections')
+        # Need to set _websession to none first to prevent any other task
+        # from closing it as well.
+        temp_websession = self._websession
+        self._websession = None
+        await temp_websession.close()
+        await asyncio.sleep(0)
 
     async def _request(
             self,
@@ -99,6 +132,10 @@ class API:
             'User-Agent': DEFAULT_USER_AGENT,
         })
 
+        # Create the web session if none exist.
+        if self._websession is None:
+            self._create_websession()
+
         start_request_time = datetime.time(datetime.now())
         _LOGGER.debug('%s Initiating request to %s', start_request_time, url)
         timeout = DEFAULT_TIMEOUT
@@ -116,7 +153,7 @@ class API:
                 if attempt > 1:
                     timeout = timeout * 2
                 _LOGGER.debug('%s Timeout requesting from %s',
-                                start_request_time, endpoint)
+                              start_request_time, endpoint)
             except ClientError as err:
                 if attempt == DEFAULT_REQUEST_RETRIES - 1:
                     raise RequestError('{} Client Error while requesting '
@@ -247,7 +284,7 @@ class API:
 
 async def login(
         username: str, password: str, brand: str,
-        websession: ClientSession) -> API:
+        websession: ClientSession = None) -> API:
     """Log in to the API."""
     api = API(brand, websession)
     await api.authenticate(username, password)
