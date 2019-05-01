@@ -20,12 +20,13 @@ DEFAULT_REQUEST_RETRIES = 3
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=5)
 
-DEFAULT_USER_AGENT = "Chamberlain/3773 (iPhone; iOS 11.0.3; Scale/2.00)"
+DEFAULT_USER_AGENT = "Chamberlain/3.73"
 
 BRAND_MAPPINGS = {
     'liftmaster': {
         'app_id':
-            'Vj8pQggXLhLy0WHahglCD4N1nAkkXQtGYpq2HrHD7H1nvmbT55KqtN6RSF4ILB/i'
+        # 'Vj8pQggXLhLy0WHahglCD4N1nAkkXQtGYpq2HrHD7H1nvmbT55KqtN6RSF4ILB/i'
+            'NWknvuBd7LoFHfXmKNMBcgajXtZEgKUh4V7WNzMidrpUUluDpVYVZx+xT4PCM5Kx'
     },
     'chamberlain': {
         'app_id':
@@ -33,7 +34,8 @@ BRAND_MAPPINGS = {
     },
     'craftsman': {
         'app_id':
-            'YmiMRRS1juXdSd0KWsuKtHmQvh5RftEp5iewHdCvsNB77FnQbY+vjCVn2nMdIeN8'
+        # 'YmiMRRS1juXdSd0KWsuKtHmQvh5RftEp5iewHdCvsNB77FnQbY+vjCVn2nMdIeN8'
+            'eU97d99kMG4t3STJZO/Mu2wt69yTQwM0WXZA5oZ74/ascQ2xQrLD/yjeVhEQccBZ'
     },
     'merlin': {
         'app_id':
