@@ -13,6 +13,12 @@ class RequestError(MyQError):
     pass
 
 
+class SecurityTokenError(MyQError):
+    """Define an exception related issues with the security token."""
+
+    pass
+
+
 class UnsupportedBrandError(MyQError):
     """Define an exception related to unsupported brands."""
 
