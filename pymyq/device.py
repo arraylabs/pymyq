@@ -21,7 +21,7 @@ STATE_TRANSITION = "transition"
 STATE_UNKNOWN = "unknown"
 
 
-class Device:
+class MyQDevice:
     """Define a generic device."""
 
     def __init__(self, api: "API", device_json: dict):

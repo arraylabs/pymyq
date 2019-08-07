@@ -5,7 +5,7 @@ from typing import Dict
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
-from .device import Device
+from .device import MyQDevice
 from .errors import RequestError, SecurityTokenError, UnsupportedBrandError
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         self._security_token = None
         self._username = None
         self._websession = websession
-        self.devices = {}  # type: Dict[str, Device]
+        self.devices = {}  # type: Dict[str, MyQDevice]
 
     @property
     def account_id(self) -> str:
@@ -54,7 +54,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         return self._account_info["Account"]["Id"]
 
     @property
-    def covers(self) -> Dict[str, Device]:
+    def covers(self) -> Dict[str, MyQDevice]:
         """Return only those devices that are covers."""
         return {
             device_id: device
@@ -142,7 +142,7 @@ class API:  # pylint: disable=too-many-instance-attributes
     async def update_device_info(self) -> dict:
         """Get up-to-date device info."""
         devices_resp = await self.request(
-            "get", "Accounts/{0}/Devices".format(self.account_id)
+            "get", "Accounts/{0}/MyQDevices".format(self.account_id)
         )
 
         for device_json in devices_resp["items"]:
@@ -151,7 +151,9 @@ class API:  # pylint: disable=too-many-instance-attributes
                 device = self.devices[serial_number]
                 device.device_json = device_json
             else:
-                self.devices[device_json["serial_number"]] = Device(self, device_json)
+                self.devices[device_json["serial_number"]] = MyQDevice(
+                    self, device_json
+                )
 
 
 async def login(
