@@ -9,13 +9,16 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-STATE_OPEN = "open"
+COMMAND_CLOSE = "close"
+COMMAND_OPEN = "open"
+
 STATE_CLOSED = "closed"
-STATE_STOPPED = "stopped"
-STATE_OPENING = "opening"
 STATE_CLOSING = "closing"
-STATE_UNKNOWN = "unknown"
+STATE_OPEN = "open"
+STATE_OPENING = "opening"
+STATE_STOPPED = "stopped"
 STATE_TRANSITION = "transition"
+STATE_UNKNOWN = "unknown"
 
 
 class Device:
@@ -64,7 +67,7 @@ class Device:
     @property
     def online(self) -> bool:
         """Return whether the device is online."""
-        return self.device_json["online"]
+        return self.device_json.get("online")
 
     @property
     def open_allowed(self) -> bool:
@@ -81,9 +84,17 @@ class Device:
         """Return the current state of the device."""
         return self.device_json["state"].get("door_state")
 
-    async def _send_state_command(self, state: str) -> None:
+    @state.setter
+    def state(self, value: str) -> None:
+        """Set the current state of the device."""
+        if not self.state:
+            return
+
+        self.state = value
+
+    async def _send_state_command(self, state_command: str) -> None:
         """Instruct the API to change the state of the device."""
-        if not self.device_json["state"].get("door_state"):
+        if self.state is None:
             raise RequestError(
                 "Cannot change state of device type: {0}".format(self.device_type)
             )
@@ -93,28 +104,28 @@ class Device:
             endpoint="Accounts/{0}/Devices/{1}/actions".format(
                 self._api.account_id, self.device_id
             ),
-            json={"action_type": state},
+            json={"action_type": state_command},
         )
 
     async def close(self) -> None:
         """Close the device."""
-        if self.device_json["state"]["door_state"] in (STATE_CLOSED, STATE_CLOSING):
+        if self.state in (STATE_CLOSED, STATE_CLOSING):
             return
 
         # Set the current state to "closing" right away (in case the user doesn't
         # run update() before checking):
-        self.device_json["state"]["door_state"] = STATE_CLOSING
-        await self._send_state_command("close")
+        self.state = STATE_CLOSING
+        await self._send_state_command(COMMAND_CLOSE)
 
     async def open(self) -> None:
         """Open the device."""
-        if self.device_json["state"]["door_state"] in (STATE_OPEN, STATE_OPENING):
+        if self.state in (STATE_OPEN, STATE_OPENING):
             return
 
         # Set the current state to "opening" right away (in case the user doesn't
         # run update() before checking):
-        self.device_json["state"]["door_state"] = STATE_OPENING
-        await self._send_state_command("open")
+        self.state = STATE_OPENING
+        await self._send_state_command(COMMAND_OPEN)
 
     async def update(self) -> None:
         """Get the latest info for this device."""
