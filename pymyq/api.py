@@ -15,6 +15,8 @@ API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
 
 DEFAULT_USER_AGENT = "Chamberlain/3.73"
 
+NON_COVER_DEVICE_FAMILIES = ("gateway")
+
 BRAND_MAPPINGS = {
     "liftmaster": {
         "app_id": "NWknvuBd7LoFHfXmKNMBcgajXtZEgKUh4V7WNzMidrpUUluDpVYVZx+xT4PCM5Kx"
@@ -59,7 +61,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         return {
             device_id: device
             for device_id, device in self.devices.items()
-            if device.device_json["device_family"] != "gateway"
+            if device.device_json["device_family"] not in NON_COVER_DEVICE_FAMILIES
         }
 
     async def request(
@@ -142,7 +144,7 @@ class API:  # pylint: disable=too-many-instance-attributes
     async def update_device_info(self) -> dict:
         """Get up-to-date device info."""
         devices_resp = await self.request(
-            "get", "Accounts/{0}/MyQDevices".format(self.account_id)
+            "get", "Accounts/{0}/Devices".format(self.account_id)
         )
 
         for device_json in devices_resp["items"]:
