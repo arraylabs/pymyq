@@ -9,7 +9,6 @@ from .device import MyQDevice
 from .errors import (
     InvalidCredentialsError,
     RequestError,
-    SecurityTokenError,
     UnsupportedBrandError,
 )
 
@@ -107,8 +106,8 @@ class API:  # pylint: disable=too-many-instance-attributes
                     if login_request:
                         raise InvalidCredentialsError("Invalid username/password")
                     if self._retry_security_token:
-                        raise SecurityTokenError(
-                            "Couldn't retrieve valid security token after several tries"
+                        raise RequestError(
+                            "Couldn't retrieve valid security token after two tries"
                         )
 
                     _LOGGER.info("401 detected; attempting to get a new security token")
