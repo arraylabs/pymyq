@@ -6,7 +6,12 @@ from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
 from .device import MyQDevice
-from .errors import RequestError, SecurityTokenError, UnsupportedBrandError
+from .errors import (
+    InvalidCredentialsError,
+    RequestError,
+    SecurityTokenError,
+    UnsupportedBrandError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,7 +20,7 @@ API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
 
 DEFAULT_USER_AGENT = "Chamberlain/3.73"
 
-NON_COVER_DEVICE_FAMILIES = ("gateway")
+NON_COVER_DEVICE_FAMILIES = "gateway"
 
 BRAND_MAPPINGS = {
     "liftmaster": {
@@ -72,6 +77,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         headers: dict = None,
         params: dict = None,
         json: dict = None,
+        login_request: bool = False,
         **kwargs
     ) -> dict:
         """Make a request."""
@@ -79,7 +85,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         if not headers:
             headers = {}
-        if self._security_token:
+        if not login_request:
             headers["SecurityToken"] = self._security_token
         headers.update(
             {
@@ -98,6 +104,8 @@ class API:  # pylint: disable=too-many-instance-attributes
                 return data
             except ClientError as err:
                 if "401" in str(err):
+                    if login_request:
+                        raise InvalidCredentialsError("Invalid username/password")
                     if self._retry_security_token:
                         raise SecurityTokenError(
                             "Couldn't retrieve valid security token after several tries"
@@ -112,6 +120,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                         headers=headers,
                         params=params,
                         json=json,
+                        login_request=login_request,
                         **kwargs
                     )
 
@@ -128,7 +137,10 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         # Retrieve and store the initial security token:
         auth_resp = await self.request(
-            "post", "Login", json={"Username": username, "Password": password}
+            "post",
+            "Login",
+            json={"Username": username, "Password": password},
+            login_request=True,
         )
         self._security_token = auth_resp["SecurityToken"]
         self._retry_security_token = False
