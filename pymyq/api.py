@@ -65,22 +65,15 @@ class API:  # pylint: disable=too-many-instance-attributes
     async def request(
         self,
         method: str,
+        endpoint: str,
         *,
-        endpoint: str = None,
-        full_url: str = None,
         headers: dict = None,
         params: dict = None,
         json: dict = None,
         **kwargs
     ) -> dict:
         """Make a request."""
-        if endpoint and full_url:
-            raise RequestError("You can't specify both endpoint and full_url")
-
-        if full_url:
-            url = full_url
-        else:
-            url = "{0}/{1}".format(API_BASE, endpoint)
+        url = "{0}/{1}".format(API_BASE, endpoint)
 
         if not headers:
             headers = {}
@@ -133,14 +126,14 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         # Retrieve and store the initial security token:
         auth_resp = await self.request(
-            "post", endpoint="Login", json={"Username": username, "Password": password}
+            "post", "Login", json={"Username": username, "Password": password}
         )
         self._security_token = auth_resp["SecurityToken"]
         self._retry_security_token = False
 
         # Retrieve and store account info:
         self._account_info = await self.request(
-            "get", endpoint="My", params={"expand": "account"}
+            "get", "My", params={"expand": "account"}
         )
 
         # Retrieve and store initial set of devices:
@@ -149,7 +142,7 @@ class API:  # pylint: disable=too-many-instance-attributes
     async def update_device_info(self) -> dict:
         """Get up-to-date device info."""
         devices_resp = await self.request(
-            "get", endpoint="Accounts/{0}/Devices".format(self.account_id)
+            "get", "Accounts/{0}/Devices".format(self.account_id)
         )
 
         for device_json in devices_resp["items"]:

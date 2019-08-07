@@ -87,21 +87,21 @@ class Device:
     @state.setter
     def state(self, value: str) -> None:
         """Set the current state of the device."""
-        if not self.state:
+        if not self.device_json["state"].get("door_state"):
             return
-
-        self.state = value
+        self.device_json["state"]["door_state"] = value
 
     async def _send_state_command(self, state_command: str) -> None:
         """Instruct the API to change the state of the device."""
-        if self.state is None:
+        # If the user tries to open or close, say, a gateway, throw an exception:
+        if not self.state:
             raise RequestError(
                 "Cannot change state of device type: {0}".format(self.device_type)
             )
 
         await self._api.request(
             "put",
-            endpoint="Accounts/{0}/Devices/{1}/actions".format(
+            "Accounts/{0}/Devices/{1}/actions".format(
                 self._api.account_id, self.device_id
             ),
             json={"action_type": state_command},
