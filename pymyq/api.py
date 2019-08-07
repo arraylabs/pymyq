@@ -1,22 +1,21 @@
 """Define the MyQ API."""
+import asyncio
+from datetime import datetime, timedelta
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
 from .device import MyQDevice
-from .errors import (
-    InvalidCredentialsError,
-    RequestError,
-    UnsupportedBrandError,
-)
+from .errors import InvalidCredentialsError, RequestError, UnsupportedBrandError
 
 _LOGGER = logging.getLogger(__name__)
 
 API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
 
+DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
 DEFAULT_USER_AGENT = "Chamberlain/3.73"
 
 NON_COVER_DEVICE_FAMILIES = "gateway"
@@ -47,6 +46,8 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         self._account_info = {}
         self._brand = brand
+        self._last_state_update = None  # type: Optional[datetime]
+        self._lock = asyncio.Lock()
         self._password = None
         self._retry_security_token = False
         self._security_token = None
@@ -94,40 +95,45 @@ class API:  # pylint: disable=too-many-instance-attributes
             }
         )
 
-        async with self._websession.request(
-            method, url, headers=headers, params=params, json=json, **kwargs
-        ) as resp:
-            data = await resp.json(content_type=None)
-            try:
-                resp.raise_for_status()
-                return data
-            except ClientError as err:
-                if "401" in str(err):
-                    if login_request:
-                        raise InvalidCredentialsError("Invalid username/password")
-                    if self._retry_security_token:
-                        raise RequestError(
-                            "Couldn't retrieve valid security token after two tries"
+        # The MyQ API can time out of multiple concurrent requests are made, so ensure
+        # that only one gets through at a time:
+        async with self._lock:
+            async with self._websession.request(
+                method, url, headers=headers, params=params, json=json, **kwargs
+            ) as resp:
+                data = await resp.json(content_type=None)
+                try:
+                    resp.raise_for_status()
+                    return data
+                except ClientError as err:
+                    if "401" in str(err):
+                        if login_request:
+                            raise InvalidCredentialsError("Invalid username/password")
+                        if self._retry_security_token:
+                            raise RequestError(
+                                "Couldn't retrieve valid security token after two tries"
+                            )
+
+                        _LOGGER.info(
+                            "401 detected; attempting to get a new security token"
+                        )
+                        self._retry_security_token = True
+                        await self.authenticate(self._username, self._password)
+                        return await self.request(
+                            method,
+                            full_url=url,
+                            headers=headers,
+                            params=params,
+                            json=json,
+                            login_request=login_request,
+                            **kwargs
                         )
 
-                    _LOGGER.info("401 detected; attempting to get a new security token")
-                    self._retry_security_token = True
-                    await self.authenticate(self._username, self._password)
-                    return await self.request(
-                        method,
-                        full_url=url,
-                        headers=headers,
-                        params=params,
-                        json=json,
-                        login_request=login_request,
-                        **kwargs
+                    raise RequestError(
+                        "Error requesting data from {0}: {1}".format(
+                            url, data["description"]
+                        )
                     )
-
-                raise RequestError(
-                    "Error requesting data from {0}: {1}".format(
-                        url, data["description"]
-                    )
-                )
 
     async def authenticate(self, username: str, password: str) -> None:
         """Authenticate and get a security token."""
@@ -154,6 +160,20 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     async def update_device_info(self) -> dict:
         """Get up-to-date device info."""
+        # The MyQ API can time out if state updates are too frequent; therefore,
+        # throttle these requests appropriately:
+        call_dt = datetime.utcnow()
+        if not self._last_state_update:
+            self._last_state_update = call_dt - DEFAULT_STATE_UPDATE_INTERVAL
+        next_available_call_dt = self._last_state_update + DEFAULT_STATE_UPDATE_INTERVAL
+
+        if call_dt < next_available_call_dt:
+            sleep_seconds = (next_available_call_dt - call_dt).total_seconds()
+            _LOGGER.debug(
+                "Throttling state update for another %s seconds", sleep_seconds
+            )
+            await asyncio.sleep(sleep_seconds)
+
         devices_resp = await self.request(
             "get", "Accounts/{0}/Devices".format(self.account_id)
         )
@@ -167,6 +187,8 @@ class API:  # pylint: disable=too-many-instance-attributes
                 self.devices[device_json["serial_number"]] = MyQDevice(
                     self, device_json
                 )
+
+        self._last_state_update = datetime.utcnow()
 
 
 async def login(
