@@ -1,6 +1,6 @@
 """Define MyQ devices."""
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from .errors import RequestError
 
@@ -32,7 +32,7 @@ class MyQDevice:
     @property
     def close_allowed(self) -> bool:
         """Return whether the device can be closed unattended."""
-        return self.device_json["state"].get("is_unattended_close_allowed")
+        return self.device_json["state"].get("is_unattended_close_allowed") is True
 
     @property
     def device_family(self) -> str:
@@ -55,7 +55,7 @@ class MyQDevice:
         return self.device_json["device_type"]
 
     @property
-    def firmware_version(self) -> str:
+    def firmware_version(self) -> Optional[str]:
         """Return the family in which this device lives."""
         return self.device_json["state"].get("firmware_version")
 
@@ -67,20 +67,20 @@ class MyQDevice:
     @property
     def online(self) -> bool:
         """Return whether the device is online."""
-        return self.device_json.get("online")
+        return self.device_json.get("online") is True
 
     @property
     def open_allowed(self) -> bool:
         """Return whether the device can be opened unattended."""
-        return self.device_json["state"].get("is_unattended_open_allowed")
+        return self.device_json["state"].get("is_unattended_open_allowed") is True
 
     @property
-    def parent_device_id(self) -> str:
+    def parent_device_id(self) -> Optional[str]:
         """Return the device ID (serial number) of this device's parent."""
         return self.device_json.get("parent_device_id")
 
     @property
-    def state(self) -> str:
+    def state(self) -> Optional[str]:
         """Return the current state of the device."""
         return self.device_json["state"].get("door_state")
 
