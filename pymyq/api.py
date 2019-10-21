@@ -16,7 +16,7 @@ API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-DEFAULT_REQUEST_RETRIES = 3
+DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
 DEFAULT_USER_AGENT = "Chamberlain/3.73"
 
@@ -100,7 +100,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                                 )
                             )
 
-                        wait_for = 2 ** attempt
+                        wait_for = min(2 ** attempt, 5)
 
                         _LOGGER.warning(
                             "Device update failed; trying again in %s seconds", wait_for
