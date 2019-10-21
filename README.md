@@ -45,14 +45,15 @@ import pymyq
 async def main() -> None:
     """Create the aiohttp session and run."""
     async with ClientSession() as websession:
-      # Valid Brands: 'chamberlain', 'craftsman', 'liftmaster', 'merlin'
-      myq = await pymyq.login('<EMAIL>', '<PASSWORD>', '<BRAND>', websession)
+      myq = await pymyq.login('<EMAIL>', '<PASSWORD>', websession)
 
       # Return only cover devices:
-      devices = await myq.get_devices()
+      devices = myq.covers
+      # >>> {"serial_number123": <Device>}
 
       # Return *all* devices:
-      devices = await myq.get_devices(covers_only=False)
+      devices = myq.devices
+      # >>> {"serial_number123": <Device>, "serial_number456": <Device>}
 
 
 asyncio.get_event_loop().run_until_complete(main())
@@ -60,28 +61,26 @@ asyncio.get_event_loop().run_until_complete(main())
 
 ## Device Properties
 
-* `brand`: the brand of the device
-* `device_id`: the device's MyQ ID
-* `parent_id`: the device's parent device's MyQ ID
-* `name`: the name of the device
-* `available`: if device is online
-* `serial`: the serial number of the device
-* `state`: the device's current state
-* `type`: the type of MyQ device
-* `open_allowed`: if device can be opened unattended
-* `close_allowed`: if device can be closed unattended
+`close_allowed`: Return whether the device can be closed unattended.
+`device_family`: Return the family in which this device lives.
+`device_id`: Return the device ID (serial number).
+`device_platform`: Return the device platform.
+`device_type`: Return the device type.
+`firmware_version`: Return the family in which this device lives.
+`name`: Return the device name.
+`online`: Return whether the device is online.
+`open_allowed`: Return whether the device can be opened unattended.
+`parent_device_id`: Return the device ID (serial number) of this device's parent.
+`state`: Return the current state of the device.
 
 ## Methods
 
 All of the routines on the `MyQDevice` class are coroutines and need to be
-`await`ed.
+`await`ed – see `example.py` for examples.
 
 * `close`: close the device
 * `open`: open the device
-* `update`: get the latest device state (which can then be accessed via the 
-`state` property). Retrieval of state from cloud is will only be done if more then 5 seconds has elapsed since last 
-request. State for all devices is retrieved through (1) request.
-* `close_connection`: close web session connection, will only close the web session if none was provided initially  
+* `update`: get the latest device info (state, etc.)
 
 # Disclaimer
 

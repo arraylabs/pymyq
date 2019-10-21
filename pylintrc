@@ -1,0 +1,14 @@
+[MESSAGES CONTROL]
+# Reasons disabled:
+# bad-continuation - Invalid attack on black
+# unnecessary-pass - This can hurt readability
+disable=
+  bad-continuation,
+  unnecessary-pass
+
+[REPORTS]
+reports=no
+
+[FORMAT]
+expected-line-ending-format=LF
+

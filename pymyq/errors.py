@@ -7,13 +7,13 @@ class MyQError(Exception):
     pass
 
 
-class RequestError(MyQError):
-    """Define an exception related to bad HTTP requests."""
+class InvalidCredentialsError(MyQError):
+    """Define an exception related to invalid credentials."""
 
     pass
 
 
-class UnsupportedBrandError(MyQError):
-    """Define an exception related to unsupported brands."""
+class RequestError(MyQError):
+    """Define an exception related to bad HTTP requests."""
 
     pass
