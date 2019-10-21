@@ -31,9 +31,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         self._account_info = {}
         self._last_state_update = None  # type: Optional[datetime]
         self._lock = asyncio.Lock()
-        self._password = None
-        self._security_token = None
-        self._username = None
+        self._security_token = None  # type: Optional[str]
         self._websession = websession
         self.devices = {}  # type: Dict[str, MyQDevice]
 
@@ -112,9 +110,6 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     async def authenticate(self, username: str, password: str) -> None:
         """Authenticate and get a security token."""
-        self._username = username
-        self._password = password
-
         # Retrieve and store the initial security token:
         auth_resp = await self.request(
             "post",
