@@ -8,19 +8,14 @@ from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
 from .device import MyQDevice
-from .errors import (
-    InvalidCredentialsError,
-    MyQError,
-    RequestError,
-    UnsupportedBrandError,
-)
+from .errors import InvalidCredentialsError, RequestError, UnsupportedBrandError
 
 _LOGGER = logging.getLogger(__name__)
 
 API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
 
-DEFAULT_REQUEST_RETRIES = 5
+DEFAULT_REQUEST_RETRIES = 3
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
 DEFAULT_USER_AGENT = "Chamberlain/3.73"
 
@@ -28,16 +23,16 @@ NON_COVER_DEVICE_FAMILIES = "gateway"
 
 BRAND_MAPPINGS = {
     "liftmaster": {
-        "app_id": "NWknvuBd7LoFHfXmKNMBcgajXtZEgKUh4V7WNzMidrpUUluDpVYVZx+xT4PCM5Kx"
+        "app_id": "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
     },
     "chamberlain": {
-        "app_id": "OA9I/hgmPHFp9RYKJqCKfwnhh28uqLJzZ9KOJf1DXoo8N2XAaVX6A1wcLYyWsnnv"
+        "app_id": "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
     },
     "craftsman": {
-        "app_id": "eU97d99kMG4t3STJZO/Mu2wt69yTQwM0WXZA5oZ74/ascQ2xQrLD/yjeVhEQccBZ"
+        "app_id": "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
     },
     "merlin": {
-        "app_id": "3004cac4e920426c823fa6c2ecf0cc28ef7d4a7b74b6470f8f0d94d6c39eb718"
+        "app_id": "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
     },
 }
 
@@ -55,7 +50,6 @@ class API:  # pylint: disable=too-many-instance-attributes
         self._last_state_update = None  # type: Optional[datetime]
         self._lock = asyncio.Lock()
         self._password = None
-        self._retry_security_token = False
         self._security_token = None
         self._username = None
         self._websession = websession
@@ -101,45 +95,38 @@ class API:  # pylint: disable=too-many-instance-attributes
             }
         )
 
-        # The MyQ API can time out if multiple concurrent requests are made, so ensure
-        # that only one gets through at a time:
+        # The MyQ API can time out if multiple concurrent requests are made, so
+        # ensure that only one gets through at a time:
         async with self._lock:
-            async with self._websession.request(
-                method, url, headers=headers, params=params, json=json, **kwargs
-            ) as resp:
-                data = await resp.json(content_type=None)
-                try:
-                    resp.raise_for_status()
-                    return data
-                except ClientError as err:
-                    if "401" in str(err):
-                        if login_request:
-                            raise InvalidCredentialsError("Invalid username/password")
-                        if self._retry_security_token:
+            for attempt in (0, DEFAULT_REQUEST_RETRIES):
+                async with self._websession.request(
+                    method, url, headers=headers, params=params, json=json, **kwargs
+                ) as resp:
+                    data = await resp.json(content_type=None)
+                    try:
+                        resp.raise_for_status()
+                        return data
+                    except ClientError as err:
+                        if "401" in str(err):
+                            if login_request:
+                                raise InvalidCredentialsError(
+                                    "Invalid username/password"
+                                )
+
+                        if attempt == DEFAULT_REQUEST_RETRIES - 1:
                             raise RequestError(
-                                "Couldn't retrieve valid security token after two tries"
+                                "Error requesting data from {0}: {1}".format(
+                                    url, data["description"]
+                                )
                             )
 
-                        _LOGGER.info(
-                            "401 detected; attempting to get a new security token"
-                        )
-                        self._retry_security_token = True
-                        await self.authenticate(self._username, self._password)
-                        return await self.request(
-                            method,
-                            full_url=url,
-                            headers=headers,
-                            params=params,
-                            json=json,
-                            login_request=login_request,
-                            **kwargs
+                        wait_for = 2 ** attempt
+
+                        _LOGGER.warning(
+                            "Device update failed; trying again in %s seconds", wait_for
                         )
 
-                    raise RequestError(
-                        "Error requesting data from {0}: {1}".format(
-                            url, data["description"]
-                        )
-                    )
+                        await asyncio.sleep(wait_for)
 
     async def authenticate(self, username: str, password: str) -> None:
         """Authenticate and get a security token."""
@@ -154,7 +141,6 @@ class API:  # pylint: disable=too-many-instance-attributes
             login_request=True,
         )
         self._security_token = auth_resp["SecurityToken"]
-        self._retry_security_token = False
 
         # Retrieve and store account info:
         self._account_info = await self.request(
@@ -177,21 +163,9 @@ class API:  # pylint: disable=too-many-instance-attributes
             _LOGGER.debug("Ignoring subsequent request within throttle window")
             return
 
-        for attempt in (0, DEFAULT_REQUEST_RETRIES):
-            try:
-                devices_resp = await self.request(
-                    "get", "Accounts/{0}/Devices".format(self.account_id)
-                )
-                break
-            except MyQError:
-                if attempt == DEFAULT_REQUEST_RETRIES - 1:
-                    raise
-
-                wait_for = 2 ** attempt
-                _LOGGER.warning(
-                    "Device update failed; trying again in %s seconds", wait_for
-                )
-                await asyncio.sleep(wait_for)
+        devices_resp = await self.request(
+            "get", "Accounts/{0}/Devices".format(self.account_id)
+        )
 
         for device_json in devices_resp["items"]:
             serial_number = device_json["serial_number"]
