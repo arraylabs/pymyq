@@ -87,11 +87,10 @@ class API:  # pylint: disable=too-many-instance-attributes
                         resp.raise_for_status()
                         return data
                     except ClientError as err:
-                        if "401" in str(err):
-                            if login_request:
-                                raise InvalidCredentialsError(
-                                    "Invalid username/password"
-                                )
+                        if "401" in str(err) and login_request:
+                            raise InvalidCredentialsError(
+                                "Invalid username/password"
+                            )
 
                         if attempt == DEFAULT_REQUEST_RETRIES - 1:
                             raise RequestError(
