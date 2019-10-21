@@ -8,13 +8,19 @@ from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
 from .device import MyQDevice
-from .errors import InvalidCredentialsError, RequestError, UnsupportedBrandError
+from .errors import (
+    InvalidCredentialsError,
+    MyQError,
+    RequestError,
+    UnsupportedBrandError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
 
+DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
 DEFAULT_USER_AGENT = "Chamberlain/3.73"
 
@@ -95,7 +101,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             }
         )
 
-        # The MyQ API can time out of multiple concurrent requests are made, so ensure
+        # The MyQ API can time out if multiple concurrent requests are made, so ensure
         # that only one gets through at a time:
         async with self._lock:
             async with self._websession.request(
@@ -161,22 +167,31 @@ class API:  # pylint: disable=too-many-instance-attributes
     async def update_device_info(self) -> dict:
         """Get up-to-date device info."""
         # The MyQ API can time out if state updates are too frequent; therefore,
-        # throttle these requests appropriately:
+        # if back-to-back requests occur within a threshold, respond to only the first:
         call_dt = datetime.utcnow()
         if not self._last_state_update:
             self._last_state_update = call_dt - DEFAULT_STATE_UPDATE_INTERVAL
         next_available_call_dt = self._last_state_update + DEFAULT_STATE_UPDATE_INTERVAL
 
         if call_dt < next_available_call_dt:
-            sleep_seconds = (next_available_call_dt - call_dt).total_seconds()
-            _LOGGER.debug(
-                "Throttling state update for another %s seconds", sleep_seconds
-            )
-            await asyncio.sleep(sleep_seconds)
+            _LOGGER.debug("Ignoring subsequent request within throttle window")
+            return
 
-        devices_resp = await self.request(
-            "get", "Accounts/{0}/Devices".format(self.account_id)
-        )
+        for attempt in (0, DEFAULT_REQUEST_RETRIES):
+            try:
+                devices_resp = await self.request(
+                    "get", "Accounts/{0}/Devices".format(self.account_id)
+                )
+                break
+            except MyQError:
+                if attempt == DEFAULT_REQUEST_RETRIES - 1:
+                    raise
+
+                wait_for = 2 ** attempt
+                _LOGGER.warning(
+                    "Device update failed; trying again in %s seconds", wait_for
+                )
+                await asyncio.sleep(wait_for)
 
         for device_json in devices_resp["items"]:
             serial_number = device_json["serial_number"]
