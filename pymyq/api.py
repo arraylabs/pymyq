@@ -8,45 +8,27 @@ from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
 from .device import MyQDevice
-from .errors import InvalidCredentialsError, RequestError, UnsupportedBrandError
+from .errors import InvalidCredentialsError, RequestError
 
 _LOGGER = logging.getLogger(__name__)
 
 API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
 
+DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
 DEFAULT_REQUEST_RETRIES = 3
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
 DEFAULT_USER_AGENT = "Chamberlain/3.73"
 
 NON_COVER_DEVICE_FAMILIES = "gateway"
 
-BRAND_MAPPINGS = {
-    "liftmaster": {
-        "app_id": "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-    },
-    "chamberlain": {
-        "app_id": "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-    },
-    "craftsman": {
-        "app_id": "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-    },
-    "merlin": {
-        "app_id": "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-    },
-}
-
 
 class API:  # pylint: disable=too-many-instance-attributes
     """Define a class for interacting with the MyQ iOS App API."""
 
-    def __init__(self, brand: str, websession: ClientSession = None) -> None:
+    def __init__(self, websession: ClientSession = None) -> None:
         """Initialize."""
-        if brand not in BRAND_MAPPINGS:
-            raise UnsupportedBrandError("Unknown brand: {0}".format(brand))
-
         self._account_info = {}
-        self._brand = brand
         self._last_state_update = None  # type: Optional[datetime]
         self._lock = asyncio.Lock()
         self._password = None
@@ -90,7 +72,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         headers.update(
             {
                 "Content-Type": "application/json",
-                "MyQApplicationId": BRAND_MAPPINGS[self._brand]["app_id"],
+                "MyQApplicationId": DEFAULT_APP_ID,
                 "User-Agent": DEFAULT_USER_AGENT,
             }
         )
@@ -181,9 +163,9 @@ class API:  # pylint: disable=too-many-instance-attributes
 
 
 async def login(
-    username: str, password: str, brand: str, websession: ClientSession = None
+    username: str, password: str, websession: ClientSession = None
 ) -> API:
     """Log in to the API."""
-    api = API(brand, websession)
+    api = API(websession)
     await api.authenticate(username, password)
     return api

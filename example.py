@@ -12,13 +12,6 @@ _LOGGER = logging.getLogger()
 EMAIL = "<EMAIL>"
 PASSWORD = "<PASSWORD>"
 
-# BRAND can be one of the following:
-# liftmaster
-# chamberlain
-# craftsmaster
-# merlin
-BRAND = "chamberlain"
-
 
 async def main() -> None:
     """Create the aiohttp session and run the example."""
@@ -26,7 +19,7 @@ async def main() -> None:
     async with ClientSession() as websession:
         try:
             # Create an API object:
-            api = await login(EMAIL, PASSWORD, BRAND, websession)
+            api = await login(EMAIL, PASSWORD, websession)
 
             # Get the account ID:
             _LOGGER.info("Account ID: %s", api.account_id)
