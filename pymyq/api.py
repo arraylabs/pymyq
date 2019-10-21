@@ -162,9 +162,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         self._last_state_update = datetime.utcnow()
 
 
-async def login(
-    username: str, password: str, websession: ClientSession = None
-) -> API:
+async def login(username: str, password: str, websession: ClientSession = None) -> API:
     """Log in to the API."""
     api = API(websession)
     await api.authenticate(username, password)
