@@ -45,8 +45,7 @@ import pymyq
 async def main() -> None:
     """Create the aiohttp session and run."""
     async with ClientSession() as websession:
-      # Valid Brands: 'chamberlain', 'craftsman', 'liftmaster', 'merlin'
-      myq = await pymyq.login('<EMAIL>', '<PASSWORD>', '<BRAND>', websession)
+      myq = await pymyq.login('<EMAIL>', '<PASSWORD>', websession)
 
       # Return only cover devices:
       devices = myq.covers
