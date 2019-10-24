@@ -143,8 +143,16 @@ class API:  # pylint: disable=too-many-instance-attributes
             "get", "Accounts/{0}/Devices".format(self.account_id)
         )
 
+        if devices_resp is None or devices_resp.get("items") is None:
+            _LOGGER.debug("Response did not contain any devices, no updates.")
+            return
+
         for device_json in devices_resp["items"]:
-            serial_number = device_json["serial_number"]
+            serial_number = device_json.get("serial_number")
+            if serial_number is None:
+                _LOGGER.debug("No serial number for device with name {name}.".format(name=device_json.get("name")))
+                continue
+
             if serial_number in self.devices:
                 device = self.devices[serial_number]
                 device.device_json = device_json
