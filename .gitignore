@@ -5,4 +5,5 @@ pymyq.egg-info
 .idea/
 __pycache__/
 venv*/
-
+build/*
+dist/*
