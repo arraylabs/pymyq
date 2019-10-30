@@ -18,8 +18,6 @@ API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
-DEFAULT_USER_AGENT = "Chamberlain/3.73"
-
 NON_COVER_DEVICE_FAMILIES = "gateway"
 
 
@@ -71,7 +69,6 @@ class API:  # pylint: disable=too-many-instance-attributes
             {
                 "Content-Type": "application/json",
                 "MyQApplicationId": DEFAULT_APP_ID,
-                "User-Agent": DEFAULT_USER_AGENT,
             }
         )
 
