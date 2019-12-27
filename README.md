@@ -61,17 +61,17 @@ asyncio.get_event_loop().run_until_complete(main())
 
 ## Device Properties
 
-`close_allowed`: Return whether the device can be closed unattended.
-`device_family`: Return the family in which this device lives.
-`device_id`: Return the device ID (serial number).
-`device_platform`: Return the device platform.
-`device_type`: Return the device type.
-`firmware_version`: Return the family in which this device lives.
-`name`: Return the device name.
-`online`: Return whether the device is online.
-`open_allowed`: Return whether the device can be opened unattended.
-`parent_device_id`: Return the device ID (serial number) of this device's parent.
-`state`: Return the current state of the device.
+* `close_allowed`: Return whether the device can be closed unattended.
+* `device_family`: Return the family in which this device lives.
+* `device_id`: Return the device ID (serial number).
+* `device_platform`: Return the device platform.
+* `device_type`: Return the device type.
+* `firmware_version`: Return the family in which this device lives.
+* `name`: Return the device name.
+* `online`: Return whether the device is online.
+* `open_allowed`: Return whether the device can be opened unattended.
+* `parent_device_id`: Return the device ID (serial number) of this device's parent.
+* `state`: Return the current state of the device.
 
 ## Methods
 
