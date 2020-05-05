@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Optional
 
 from .errors import RequestError
 
+from .const import DEVICE_TYPE, DEVICES_API_VERSION
+
 if TYPE_CHECKING:
     from .api import API
 
@@ -52,7 +54,7 @@ class MyQDevice:
     @property
     def device_type(self) -> str:
         """Return the device type."""
-        return self.device_json["device_type"]
+        return self.device_json[DEVICE_TYPE]
 
     @property
     def firmware_version(self) -> Optional[str]:
@@ -105,6 +107,7 @@ class MyQDevice:
                 self._api.account_id, self.device_id
             ),
             json={"action_type": state_command},
+            api_version=DEVICES_API_VERSION
         )
 
     async def close(self) -> None:

@@ -7,13 +7,14 @@ from typing import Dict, Optional
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
+from .const import DEVICES_API_VERSION
 from .device import MyQDevice
 from .errors import InvalidCredentialsError, RequestError
 
 _LOGGER = logging.getLogger(__name__)
 
-API_VERSION = 5
-API_BASE = "https://api.myqdevice.com/api/v{0}".format(API_VERSION)
+BASE_API_VERSION = 5
+API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
 DEFAULT_REQUEST_RETRIES = 5
@@ -56,10 +57,12 @@ class API:  # pylint: disable=too-many-instance-attributes
         params: dict = None,
         json: dict = None,
         login_request: bool = False,
+        api_version: str = BASE_API_VERSION,
         **kwargs
     ) -> dict:
         """Make a request."""
-        url = "{0}/{1}".format(API_BASE, endpoint)
+        api_base = API_BASE.format(api_version)
+        url = "{0}/{1}".format(api_base, endpoint)
 
         if not headers:
             headers = {}
@@ -137,7 +140,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             return
 
         devices_resp = await self.request(
-            "get", "Accounts/{0}/Devices".format(self.account_id)
+            "get", "Accounts/{0}/Devices".format(self.account_id), api_version=DEVICES_API_VERSION
         )
 
         if devices_resp is None or devices_resp.get("items") is None:
