@@ -1,6 +1,6 @@
 -i https://pypi.python.org/simple
 astroid==2.0.4
-bleach==3.0.2
+bleach==3.1.4
 certifi==2018.10.15
 cffi==1.11.5
 chardet==3.0.4
