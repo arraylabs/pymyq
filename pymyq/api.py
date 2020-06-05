@@ -17,6 +17,7 @@ BASE_API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
+DEFAULT_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
 NON_COVER_DEVICE_FAMILIES = "gateway"
@@ -72,6 +73,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             {
                 "Content-Type": "application/json",
                 "MyQApplicationId": DEFAULT_APP_ID,
+                "User-Agent": DEFAULT_USER_AGENT
             }
         )
 
