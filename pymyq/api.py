@@ -17,8 +17,18 @@ BASE_API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-DEFAULT_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+DEFAULT_USER_AGENT = "myQ/14041 CFNetwork/1107.1 Darwin/19.0.0"
+DEFAULT_BRAND_ID = 2
 DEFAULT_REQUEST_RETRIES = 5
+DEFAULT_CULTURE = "en"
+MYQ_HEADERS = {
+    "Content-Type": "application/json",
+    "MyQApplicationId": DEFAULT_APP_ID,
+    "User-Agent": DEFAULT_USER_AGENT,
+    "ApiVersion": str(DEVICES_API_VERSION),
+    "BrandId": str(DEFAULT_BRAND_ID),
+    "Culture": DEFAULT_CULTURE
+}
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
 NON_COVER_DEVICE_FAMILIES = "gateway"
 
@@ -69,13 +79,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             headers = {}
         if not login_request:
             headers["SecurityToken"] = self._security_token
-        headers.update(
-            {
-                "Content-Type": "application/json",
-                "MyQApplicationId": DEFAULT_APP_ID,
-                "User-Agent": DEFAULT_USER_AGENT
-            }
-        )
+        headers.update(MYQ_HEADERS)
 
         # The MyQ API can time out if multiple concurrent requests are made, so
         # ensure that only one gets through at a time:
