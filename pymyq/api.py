@@ -17,14 +17,12 @@ BASE_API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-DEFAULT_USER_AGENT = "okhttp/3.10.0"
 DEFAULT_BRAND_ID = 2
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_CULTURE = "en"
 MYQ_HEADERS = {
     "Content-Type": "application/json",
     "MyQApplicationId": DEFAULT_APP_ID,
-    "User-Agent": DEFAULT_USER_AGENT,
     "ApiVersion": str(DEVICES_API_VERSION),
     "BrandId": str(DEFAULT_BRAND_ID),
     "Culture": DEFAULT_CULTURE
@@ -87,7 +85,8 @@ class API:  # pylint: disable=too-many-instance-attributes
             for attempt in (0, DEFAULT_REQUEST_RETRIES):
                 try:
                     async with self._websession.request(
-                        method, url, headers=headers, params=params, json=json, **kwargs
+                        method, url, headers=headers, params=params,
+                        skip_auto_headers={'USER-AGENT'}, json=json, **kwargs
                     ) as resp:
                         data = await resp.json(content_type=None)
                         resp.raise_for_status()
