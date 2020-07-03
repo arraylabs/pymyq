@@ -69,7 +69,7 @@ class MyQDevice:
     @property
     def online(self) -> bool:
         """Return whether the device is online."""
-        return self.device_json.get("online") is True
+        return self.device_json["state"].get("online") is True
 
     @property
     def open_allowed(self) -> bool:
