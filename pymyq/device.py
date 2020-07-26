@@ -108,9 +108,9 @@ class MyQDevice:
             )
 
         account_id = self._api.account_id
-        if self.href() is not None:
+        if self.href is not None:
             rule = r".*/accounts/(.*)/devices/(.*)"
-            infos = re.search(rule, self.href())
+            infos = re.search(rule, self.href)
             if infos is not None:
                 account_id = infos.group(1)
         await self._api.request(
