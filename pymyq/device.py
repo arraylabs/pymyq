@@ -1,5 +1,6 @@
 """Define MyQ devices."""
 import logging
+import re
 from typing import TYPE_CHECKING, Optional
 
 from .errors import RequestError
@@ -86,6 +87,11 @@ class MyQDevice:
         """Return the current state of the device."""
         return self.device_json["state"].get("door_state")
 
+    @property
+    def href(self) -> Optional[str]:
+        """Return the hyperlinks of the device."""
+        return self.device_json.get("href")
+
     @state.setter
     def state(self, value: str) -> None:
         """Set the current state of the device."""
@@ -101,10 +107,16 @@ class MyQDevice:
                 "Cannot change state of device type: {0}".format(self.device_type)
             )
 
+        account_id = self._api.account_id
+        if self.href is not None:
+            rule = r".*/accounts/(.*)/devices/(.*)"
+            infos = re.search(rule, self.href)
+            if infos is not None:
+                account_id = infos.group(1)
         await self._api.request(
             "put",
             "Accounts/{0}/Devices/{1}/actions".format(
-                self._api.account_id, self.device_id
+                account_id, self.device_id
             ),
             json={"action_type": state_command},
             api_version=DEVICES_API_VERSION

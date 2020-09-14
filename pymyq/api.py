@@ -86,6 +86,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         async with self._lock:
             for attempt in (0, DEFAULT_REQUEST_RETRIES):
                 try:
+                    _LOGGER.debug("myq api request {}".format(url))
                     async with self._websession.request(
                         method, url, headers=headers, params=params, json=json, **kwargs
                     ) as resp:
@@ -145,15 +146,32 @@ class API:  # pylint: disable=too-many-instance-attributes
             _LOGGER.debug("Ignoring subsequent request within throttle window")
             return
 
-        devices_resp = await self.request(
-            "get", "Accounts/{0}/Devices".format(self.account_id), api_version=DEVICES_API_VERSION
+        devices = []
+        accounts_resp = await self.request(
+            "get", "Accounts"
         )
+        if accounts_resp is not None and accounts_resp.get("Items") is not None:
+            for account in accounts_resp["Items"]:
+                account_id = account["Id"]
+                devices_resp = await self.request(
+                    "get", "Accounts/{0}/Devices".format(account_id), api_version=DEVICES_API_VERSION
+                )
+                if devices_resp is not None and devices_resp.get("items") is not None:
+                    devices += devices_resp["items"]
 
-        if devices_resp is None or devices_resp.get("items") is None:
+        if not devices:
+            devices_resp = await self.request(
+                "get", "Accounts/{0}/Devices".format(self.account_id), api_version=DEVICES_API_VERSION
+            )
+
+            if devices_resp is not None and devices_resp.get("items") is not None:
+                devices += devices_resp["items"]
+
+        if not devices:
             _LOGGER.debug("Response did not contain any devices, no updates.")
             return
 
-        for device_json in devices_resp["items"]:
+        for device_json in devices:
             serial_number = device_json.get("serial_number")
             if serial_number is None:
                 _LOGGER.debug("No serial number for device with name {name}.".format(name=device_json.get("name")))
