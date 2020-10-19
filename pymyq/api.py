@@ -123,7 +123,11 @@ class API:  # pylint: disable=too-many-instance-attributes
             json={"Username": username, "Password": password},
             login_request=True,
         )
-        self._security_token = auth_resp["SecurityToken"]
+        self._security_token = auth_resp.get("SecurityToken")
+        if self._security_token is None:
+            raise RequestError(
+                "Authentication response did not contain a security token yet one is expected."
+            )
 
         # Retrieve and store account info:
         self._account_info = await self.request(
