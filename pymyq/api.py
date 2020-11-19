@@ -39,6 +39,7 @@ class API:  # pylint: disable=too-many-instance-attributes
     def __init__(self, websession: ClientSession = None) -> None:
         """Initialize."""
         self._account_info = {}
+        self._credentials = {}
         self._last_state_update = None  # type: Optional[datetime]
         self._lock = asyncio.Lock()
         self._security_token = None  # type: Optional[str]
@@ -84,9 +85,10 @@ class API:  # pylint: disable=too-many-instance-attributes
         # The MyQ API can time out if multiple concurrent requests are made, so
         # ensure that only one gets through at a time:
         async with self._lock:
-            for attempt in (0, DEFAULT_REQUEST_RETRIES):
+            for attempt in range(DEFAULT_REQUEST_RETRIES):
+                data = {}
                 try:
-                    _LOGGER.debug("myq api request {}".format(url))
+                    _LOGGER.debug(f"Sending myq api request {url}")
                     async with self._websession.request(
                         method, url, headers=headers, params=params, json=json, **kwargs
                     ) as resp:
@@ -94,29 +96,40 @@ class API:  # pylint: disable=too-many-instance-attributes
                         resp.raise_for_status()
                         return data
                 except ClientError as err:
-                    if "401" in str(err) and login_request:
-                        raise InvalidCredentialsError(
-                            "Invalid username/password"
-                        )
+                    _LOGGER.debug(f"Attempt {attempt} request failed with exception: {str(err)}")
+                    if hasattr(err, "status") and err.status == 401:
+                        if login_request:
+                            self._credentials = {}
+                            raise InvalidCredentialsError("Invalid username/password")
+
+                        _LOGGER.debug(f"Security token has expired, re-authenticating to MyQ")
+                        try:
+                            await api.authenticate(self._credentials.get("username"), self._credentials.get("password"))
+                        except RequestError as auth_err:
+                            message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                            _LOGGER.error(message)
+                            raise RequestError(message)
 
                     if attempt == DEFAULT_REQUEST_RETRIES - 1:
-                        raise RequestError(
-                            "Error requesting data from {0}: {1}".format(
-                                url, data.get("description", str(err))
-                            )
-                        )
+                        message = f"Error requesting data from {url}: {data.get('description', str(err))}"
+                        _LOGGER.error(message)
+                        raise RequestError(message)
 
                     wait_for = min(2 ** attempt, 5)
 
-                    _LOGGER.warning(
-                        "Device update failed; trying again in %s seconds", wait_for
-                    )
+                    _LOGGER.warning(f"Device update failed; trying again in {wait_for} seconds")
 
                     await asyncio.sleep(wait_for)
 
     async def authenticate(self, username: str, password: str) -> None:
         """Authenticate and get a security token."""
+        if username is None or password is None:
+            _LOGGER.debug("No username/password, most likely due to previous failed authentication.")
+            return
+
+        self._credentials = {"username": username, "password": password}
         # Retrieve and store the initial security token:
+        _LOGGER.debug("Sending authentication request to MyQ")
         auth_resp = await self.request(
             "post",
             "Login",
@@ -130,11 +143,13 @@ class API:  # pylint: disable=too-many-instance-attributes
             )
 
         # Retrieve and store account info:
+        _LOGGER.debug("Retrieving account information")
         self._account_info = await self.request(
             "get", "My", params={"expand": "account"}
         )
 
         # Retrieve and store initial set of devices:
+        _LOGGER.debug("Retrieving MyQ information")
         await self.update_device_info()
 
     async def update_device_info(self) -> dict:
@@ -151,12 +166,14 @@ class API:  # pylint: disable=too-many-instance-attributes
             return
 
         devices = []
+        _LOGGER.debug("Retrieving accounts")
         accounts_resp = await self.request(
             "get", "Accounts"
         )
         if accounts_resp is not None and accounts_resp.get("Items") is not None:
             for account in accounts_resp["Items"]:
                 account_id = account["Id"]
+                _LOGGER.debug(f"Retrieving devices for account {account_id}")
                 devices_resp = await self.request(
                     "get", "Accounts/{0}/Devices".format(account_id), api_version=DEVICES_API_VERSION
                 )
@@ -164,6 +181,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                     devices += devices_resp["items"]
 
         if not devices:
+            _LOGGER.debug("Retrieving device information")
             devices_resp = await self.request(
                 "get", "Accounts/{0}/Devices".format(self.account_id), api_version=DEVICES_API_VERSION
             )

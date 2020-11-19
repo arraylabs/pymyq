@@ -12,7 +12,6 @@ _LOGGER = logging.getLogger()
 EMAIL = "<EMAIL>"
 PASSWORD = "<PASSWORD>"
 
-
 async def main() -> None:
     """Create the aiohttp session and run the example."""
     logging.basicConfig(level=logging.INFO)
