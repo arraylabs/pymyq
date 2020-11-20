@@ -115,8 +115,8 @@ class MyQDevice:
                 account_id = infos.group(1)
         _LOGGER.debug(f"Sending command {state_comand} for {self.name}")
         await self._api.request(
-            "put",
-            "Accounts/{0}/Devices/{1}/actions".format(
+            method="put",
+            endpoint="Accounts/{0}/Devices/{1}/actions".format(
                 account_id, self.device_id
             ),
             json={"action_type": state_command},
