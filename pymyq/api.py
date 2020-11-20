@@ -60,17 +60,70 @@ class API:  # pylint: disable=too-many-instance-attributes
             if device.device_json["device_family"] not in NON_COVER_DEVICE_FAMILIES
         }
 
+    async def _send_request(
+        self,
+        method: str,
+        url: str,
+        headers: dict = None,
+        params: dict = None,
+        json: dict = None,
+        login_request: bool = False,
+    ) -> dict:
+
+        attempt = 0
+        while attempt < DEFAULT_REQUEST_RETRIES - 1:
+            if attempt != 0:
+                wait_for = min(2 ** attempt, 5)
+                _LOGGER.warning(f"Device update failed; trying again in {wait_for} seconds")
+                await asyncio.sleep(wait_for)
+
+            attempt += 1
+            data = {}
+            request_headers = headers
+            if not login_request:
+                request_headers["SecurityToken"] = self._security_token
+
+            try:
+                _LOGGER.debug(f"Sending myq api request {url}")
+                async with self._websession.request(
+                        method, url, headers=request_headers, params=params, json=json) as resp:
+                    data = await resp.json(content_type=None)
+                    resp.raise_for_status()
+                    return data
+            except ClientError as err:
+                _LOGGER.debug(f"Attempt {attempt} request failed with exception: {str(err)}")
+                if hasattr(err, "status") and err.status == 401:
+                    if login_request:
+                        self._credentials = {}
+                        raise InvalidCredentialsError("Invalid username/password")
+
+                    _LOGGER.debug(f"Security token has expired, re-authenticating to MyQ")
+                    try:
+                        await self.authenticate(self._credentials.get("username"),
+                                                self._credentials.get("password"),
+                                                True)
+                    except RequestError as auth_err:
+                        message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                        _LOGGER.error(message)
+                        raise RequestError(message)
+
+                    # Reset the attempt counter as we're now re-authenticated.
+                    attempt = 0
+                    continue
+
+        message = f"Error requesting data from {url}: {data.get('description', str(err))}"
+        _LOGGER.error(message)
+        raise RequestError(message)
+
     async def request(
         self,
         method: str,
         endpoint: str,
-        *,
         headers: dict = None,
         params: dict = None,
         json: dict = None,
         login_request: bool = False,
         api_version: str = BASE_API_VERSION,
-        **kwargs
     ) -> dict:
         """Make a request."""
         api_base = API_BASE.format(api_version)
@@ -78,50 +131,34 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         if not headers:
             headers = {}
-        if not login_request:
-            headers["SecurityToken"] = self._security_token
         headers.update(MYQ_HEADERS)
 
         # The MyQ API can time out if multiple concurrent requests are made, so
-        # ensure that only one gets through at a time:
+        # ensure that only one gets through at a time.
+        # Exception is when this is a login request AND there is already a lock, in that case
+        # we're sending the request anyways as we know there is no active request now.
+        if login_request and self._lock.locked():
+            return await self._send_request(
+                method=method,
+                url=url,
+                headers=headers,
+                params=params,
+                json=json,
+                login_request=login_request,
+            )
+
         async with self._lock:
-            for attempt in range(DEFAULT_REQUEST_RETRIES):
-                data = {}
-                try:
-                    _LOGGER.debug(f"Sending myq api request {url}")
-                    async with self._websession.request(
-                        method, url, headers=headers, params=params, json=json, **kwargs
-                    ) as resp:
-                        data = await resp.json(content_type=None)
-                        resp.raise_for_status()
-                        return data
-                except ClientError as err:
-                    _LOGGER.debug(f"Attempt {attempt} request failed with exception: {str(err)}")
-                    if hasattr(err, "status") and err.status == 401:
-                        if login_request:
-                            self._credentials = {}
-                            raise InvalidCredentialsError("Invalid username/password")
+            return await self._send_request(
+                method=method,
+                url=url,
+                headers=headers,
+                params=params,
+                json=json,
+                login_request=login_request,
+            )
 
-                        _LOGGER.debug(f"Security token has expired, re-authenticating to MyQ")
-                        try:
-                            await api.authenticate(self._credentials.get("username"), self._credentials.get("password"))
-                        except RequestError as auth_err:
-                            message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
-                            _LOGGER.error(message)
-                            raise RequestError(message)
 
-                    if attempt == DEFAULT_REQUEST_RETRIES - 1:
-                        message = f"Error requesting data from {url}: {data.get('description', str(err))}"
-                        _LOGGER.error(message)
-                        raise RequestError(message)
-
-                    wait_for = min(2 ** attempt, 5)
-
-                    _LOGGER.warning(f"Device update failed; trying again in {wait_for} seconds")
-
-                    await asyncio.sleep(wait_for)
-
-    async def authenticate(self, username: str, password: str) -> None:
+    async def authenticate(self, username: str, password: str, token_only = False) -> None:
         """Authenticate and get a security token."""
         if username is None or password is None:
             _LOGGER.debug("No username/password, most likely due to previous failed authentication.")
@@ -131,21 +168,27 @@ class API:  # pylint: disable=too-many-instance-attributes
         # Retrieve and store the initial security token:
         _LOGGER.debug("Sending authentication request to MyQ")
         auth_resp = await self.request(
-            "post",
-            "Login",
+            method="post",
+            endpoint="Login",
             json={"Username": username, "Password": password},
             login_request=True,
         )
         self._security_token = auth_resp.get("SecurityToken")
         if self._security_token is None:
+            _LOGGER.debug("No security token received.")
             raise RequestError(
                 "Authentication response did not contain a security token yet one is expected."
             )
 
+        if token_only:
+            return
+
         # Retrieve and store account info:
         _LOGGER.debug("Retrieving account information")
         self._account_info = await self.request(
-            "get", "My", params={"expand": "account"}
+            method="get",
+            endpoint="My",
+            params={"expand": "account"}
         )
 
         # Retrieve and store initial set of devices:
@@ -213,5 +256,5 @@ class API:  # pylint: disable=too-many-instance-attributes
 async def login(username: str, password: str, websession: ClientSession = None) -> API:
     """Log in to the API."""
     api = API(websession)
-    await api.authenticate(username, password)
+    await api.authenticate(username, password, False)
     return api
