@@ -113,7 +113,7 @@ class MyQDevice:
             infos = re.search(rule, self.href)
             if infos is not None:
                 account_id = infos.group(1)
-        _LOGGER.debug(f"Sending command {state_comand} for {self.name}")
+        _LOGGER.debug(f"Sending command {state_command} for {self.name}")
         await self._api.request(
             method="put",
             endpoint="Accounts/{0}/Devices/{1}/actions".format(
