@@ -92,6 +92,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                     return data
             except ClientError as err:
                 _LOGGER.debug(f"Attempt {attempt} request failed with exception: {str(err)}")
+                message = f"Error requesting data from {url}: {data.get('description', str(err))}"
                 if hasattr(err, "status") and err.status == 401:
                     if login_request:
                         self._credentials = {}
@@ -111,7 +112,6 @@ class API:  # pylint: disable=too-many-instance-attributes
                     attempt = 0
                     continue
 
-        message = f"Error requesting data from {url}: {data.get('description', str(err))}"
         _LOGGER.error(message)
         raise RequestError(message)
 
