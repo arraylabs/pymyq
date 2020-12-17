@@ -17,7 +17,7 @@ BASE_API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-DEFAULT_USER_AGENT = "okhttp/3.10.0"
+DEFAULT_USER_AGENT = 'pymyq'
 DEFAULT_BRAND_ID = 2
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_CULTURE = "en"
@@ -92,6 +92,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                     return data
             except ClientError as err:
                 _LOGGER.debug(f"Attempt {attempt} request failed with exception: {str(err)}")
+                message = f"Error requesting data from {url}: {data.get('description', str(err))}"
                 if hasattr(err, "status") and err.status == 401:
                     if login_request:
                         self._credentials = {}
@@ -111,7 +112,6 @@ class API:  # pylint: disable=too-many-instance-attributes
                     attempt = 0
                     continue
 
-        message = f"Error requesting data from {url}: {data.get('description', str(err))}"
         _LOGGER.error(message)
         raise RequestError(message)
 
