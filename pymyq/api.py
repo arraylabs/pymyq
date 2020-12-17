@@ -1,7 +1,9 @@
 """Define the MyQ API."""
 import asyncio
-from datetime import datetime, timedelta
 import logging
+import string
+from datetime import datetime, timedelta
+from random import choices
 from typing import Dict, Optional
 
 from aiohttp import ClientSession
@@ -17,7 +19,8 @@ BASE_API_VERSION = 5
 API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-DEFAULT_USER_AGENT = 'pymyq'
+# Generate random string for User Agent.
+DEFAULT_USER_AGENT = "".join(choices(string.ascii_letters + string.digits, k=10))
 DEFAULT_BRAND_ID = 2
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_CULTURE = "en"
