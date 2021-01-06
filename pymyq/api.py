@@ -94,9 +94,11 @@ class API:  # pylint: disable=too-many-instance-attributes
                     resp.raise_for_status()
                     return data
             except ClientError as err:
-                _LOGGER.debug(f"Attempt {attempt} request failed with exception: {str(err)}")
-                message = f"Error requesting data from {url}: {data.get('description', str(err))}"
-                if hasattr(err, "status") and err.status == 401:
+                _LOGGER.debug(f"Attempt {attempt} request failed with exception:: {str(err)}")
+                status_code = err.status if hasattr(err, "status") else ""
+
+                message = f"Error requesting data from {url}: {str(status_code)} - {data.get('description', str(err))}"
+                if status_code == 401:
                     if login_request:
                         self._credentials = {}
                         raise InvalidCredentialsError("Invalid username/password")
