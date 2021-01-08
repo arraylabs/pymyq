@@ -20,7 +20,8 @@ API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
 # Generate random string for User Agent.
-DEFAULT_USER_AGENT = "".join(choices(string.ascii_letters + string.digits, k=10))
+# DEFAULT_USER_AGENT = "".join(choices(string.ascii_letters + string.digits, k=10))
+DEFAULT_USER_AGENT = "pymyq"
 DEFAULT_BRAND_ID = 2
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_CULTURE = "en"
@@ -258,8 +259,9 @@ class API:  # pylint: disable=too-many-instance-attributes
         self._last_state_update = datetime.utcnow()
 
 
-async def login(username: str, password: str, websession: ClientSession = None) -> API:
+async def login(username: str, password: str, websession: ClientSession = None, useragent: str = DEFAULT_USER_AGENT) -> API:
     """Log in to the API."""
+    MYQ_HEADERS.update({"User-Agent": useragent})
     api = API(websession)
     await api.authenticate(username, password, False)
     return api
