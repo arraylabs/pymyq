@@ -269,7 +269,7 @@ async def login(username: str, password: str, websession: ClientSession = None, 
                     async with session.get(url) as resp:
                         useragent = await resp.text()
                         resp.raise_for_status()
-                        _LOGGER.debug(f"Retrieved user agent f{useragent} from GitHub.")
+                        _LOGGER.debug(f"Retrieved user agent {useragent} from GitHub.")
 
             except ClientError as exc:
                 useragent = "#RANDOM"
