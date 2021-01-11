@@ -20,7 +20,7 @@ API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
 # Generate random string for User Agent.
-DEFAULT_USER_AGENT = "".join(choices(string.ascii_letters + string.digits, k=10))
+DEFAULT_USER_AGENT = "".join(choices(string.ascii_letters + string.digits, k=5))
 DEFAULT_BRAND_ID = 2
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_CULTURE = "en"
