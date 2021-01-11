@@ -260,6 +260,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 async def login(username: str, password: str, websession: ClientSession = None, useragent: str = None) -> API:
     """Log in to the API."""
     if useragent is None:
+            # Retrieve user agent from GitHub if not provided for login.
             _LOGGER.debug("No user agent provided, trying to retrieve from GitHub.")
             url = f"https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
 
@@ -271,24 +272,29 @@ async def login(username: str, password: str, websession: ClientSession = None, 
                         _LOGGER.debug(f"Retrieved user agent {useragent} from GitHub.")
 
             except ClientError as exc:
+                # Default user agent to random string with length of 5 if failure to retrieve it from GitHub.
                 useragent = "#RANDOM:5"
                 _LOGGER.warning(f"Failed retrieving user agent from GitHub, will use randomized user agent "
                                 f"instead: {str(exc)}")
-
-            useragent_list = useragent.split(":")
-            if useragent_list[0] == "#RANDOM":
-                try:
-                    randomlength = 5 if len(useragent_list) == 1 else int(useragent_list[1])
-                except ValueError:
-                    _LOGGER.debug(f"Random length value {useragent_list[1]} in user agent {useragent} is not "
-                                  f"an integer. Setting to 5 instead.")
-                    randomlength = 5
-
-                useragent = "".join(choices(string.ascii_letters + string.digits, k=randomlength))
-                _LOGGER.debug(f"User agent set to randomized value: {useragent}.")
     else:
-        _LOGGER.debug(f"Received user agent f{useragent}.")
+        _LOGGER.debug(f"Received user agent {useragent}.")
 
+    # Check if value for useragent is to create a random user agent.
+    useragent_list = useragent.split(":")
+    if useragent_list[0] == "#RANDOM":
+        # Create a random string, check if length is provided for the random string, if not then default is 5.
+        try:
+            randomlength = int(useragent_list[1]) if len(useragent_list) == 2 else 5
+        except ValueError:
+            _LOGGER.debug(f"Random length value {useragent_list[1]} in user agent {useragent} is not an integer. "
+                          f"Setting to 5 instead.")
+            randomlength = 5
+
+        # Create the random user agent.
+        useragent = "".join(choices(string.ascii_letters + string.digits, k=randomlength))
+        _LOGGER.debug(f"User agent set to randomized value: {useragent}.")
+
+    # Set the user agent in the headers.
     MYQ_HEADERS.update({"User-Agent": useragent})
     api = API(websession)
     await api.authenticate(username, password, False)
