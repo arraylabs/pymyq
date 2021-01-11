@@ -27,7 +27,6 @@ DEFAULT_CULTURE = "en"
 MYQ_HEADERS = {
     "Content-Type": "application/json",
     "MyQApplicationId": DEFAULT_APP_ID,
-    "User-Agent": DEFAULT_USER_AGENT,
     "ApiVersion": str(DEVICES_API_VERSION),
     "BrandId": str(DEFAULT_BRAND_ID),
     "Culture": DEFAULT_CULTURE
@@ -272,13 +271,21 @@ async def login(username: str, password: str, websession: ClientSession = None, 
                         _LOGGER.debug(f"Retrieved user agent {useragent} from GitHub.")
 
             except ClientError as exc:
-                useragent = "#RANDOM"
+                useragent = "#RANDOM:5"
                 _LOGGER.warning(f"Failed retrieving user agent from GitHub, will use randomized user agent "
                                 f"instead: {str(exc)}")
 
-            if useragent == "#RANDOM":
-                useragent = DEFAULT_USER_AGENT
-                _LOGGER.debug(f"User agent set to randomized value: f{useragent}.")
+            useragent_list = useragent.split(":")
+            if useragent_list[0] == "#RANDOM":
+                try:
+                    randomlength = 5 if len(useragent_list) == 1 else int(useragent_list[1])
+                except ValueError:
+                    _LOGGER.debug(f"Random length value {useragent_list[1]} in user agent {useragent} is not "
+                                  f"an integer. Setting to 5 instead.")
+                    randomlength = 5
+
+                useragent = "".join(choices(string.ascii_letters + string.digits, k=randomlength))
+                _LOGGER.debug(f"User agent set to randomized value: {useragent}.")
     else:
         _LOGGER.debug(f"Received user agent f{useragent}.")
 
