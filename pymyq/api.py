@@ -20,8 +20,7 @@ API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
 # Generate random string for User Agent.
-# DEFAULT_USER_AGENT = "".join(choices(string.ascii_letters + string.digits, k=10))
-DEFAULT_USER_AGENT = "pymyq"
+DEFAULT_USER_AGENT = "".join(choices(string.ascii_letters + string.digits, k=10))
 DEFAULT_BRAND_ID = 2
 DEFAULT_REQUEST_RETRIES = 5
 DEFAULT_CULTURE = "en"
@@ -259,8 +258,26 @@ class API:  # pylint: disable=too-many-instance-attributes
         self._last_state_update = datetime.utcnow()
 
 
-async def login(username: str, password: str, websession: ClientSession = None, useragent: str = DEFAULT_USER_AGENT) -> API:
+async def login(username: str, password: str, websession: ClientSession = None, useragent: str = None) -> API:
     """Log in to the API."""
+    if useragent is None:
+            _LOGGER.debug("No user agent provided, trying to retrieve from GitHub.")
+            url = f"https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
+
+            try:
+                async with ClientSession() as session:
+                    async with session.get(url) as resp:
+                        useragent = await resp.text()
+                        resp.raise_for_status()
+                        _LOGGER.debug(f"Retrieved user agent f{useragent} from GitHub.")
+
+            except ClientError as exc:
+                useragent = DEFAULT_USER_AGENT
+                _LOGGER.warning(f"Failed retrieving user agent from GitHub, will use randomized user agent {useragent} "
+                                f"instead: {str(exc)}")
+    else:
+        _LOGGER.debug(f"Received user agent f{useragent}.")
+
     MYQ_HEADERS.update({"User-Agent": useragent})
     api = API(websession)
     await api.authenticate(username, password, False)
