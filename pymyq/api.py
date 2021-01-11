@@ -272,9 +272,13 @@ async def login(username: str, password: str, websession: ClientSession = None, 
                         _LOGGER.debug(f"Retrieved user agent f{useragent} from GitHub.")
 
             except ClientError as exc:
-                useragent = DEFAULT_USER_AGENT
-                _LOGGER.warning(f"Failed retrieving user agent from GitHub, will use randomized user agent {useragent} "
+                useragent = "#RANDOM"
+                _LOGGER.warning(f"Failed retrieving user agent from GitHub, will use randomized user agent "
                                 f"instead: {str(exc)}")
+
+            if useragent == "#RANDOM":
+                useragent = DEFAULT_USER_AGENT
+                _LOGGER.debug(f"User agent set to randomized value: f{useragent}.")
     else:
         _LOGGER.debug(f"Received user agent f{useragent}.")
 
