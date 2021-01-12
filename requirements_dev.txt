@@ -14,7 +14,7 @@ lazy-object-proxy==1.3.1
 mccabe==0.6.1
 mypy-extensions==0.4.1
 mypy==0.641
-pkginfo==1.4.2
+pkginfo==1.6.1
 pycodestyle==2.3.1
 pycparser==2.19
 pydocstyle==3.0.0
