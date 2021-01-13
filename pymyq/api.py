@@ -16,6 +16,7 @@ from .const import \
     API_BASE,\
     BASE_API_VERSION,\
     DEVICES_API_VERSION,\
+    DEVICES_API_VERSION_HEADER,\
     DEVICES_ENDPOINT,\
     LOGIN_ENDPOINT
 
@@ -33,7 +34,7 @@ DEFAULT_CULTURE = "en"
 MYQ_HEADERS = {
     "Content-Type": "application/json",
     "MyQApplicationId": DEFAULT_APP_ID,
-    "ApiVersion": str(DEVICES_API_VERSION),
+    "ApiVersion": str(DEVICES_API_VERSION_HEADER),
     "BrandId": str(DEFAULT_BRAND_ID),
     "Culture": DEFAULT_CULTURE
 }
