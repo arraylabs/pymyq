@@ -1,6 +1,14 @@
 """The myq constants."""
 
+API_BASE = "https://api.myqdevice.com/api/v{0}"
+BASE_API_VERSION = 5
 DEVICES_API_VERSION = 5.1
+
+LOGIN_ENDPOINT = "Login"
+ACCOUNT_INFORMATION_ENDPOINT = "My"
+ACCOUNTS_ENDPOINT = "Accounts"
+DEVICES_ENDPOINT = f"{ACCOUNTS_ENDPOINT}/{{0}}/Devices"
+ACTION_ENDPOINT = f"{ACCOUNTS_ENDPOINT}/{{0}}/Devices/{{1}}/actions"
 
 DEVICE_TYPE = "device_type"
 DEVICE_TYPE_GATE = "gate"

@@ -8,15 +8,21 @@ from typing import Dict, Optional
 
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
+from json import JSONDecodeError
 
-from .const import DEVICES_API_VERSION
+from .const import \
+    ACCOUNTS_ENDPOINT,\
+    ACCOUNT_INFORMATION_ENDPOINT,\
+    API_BASE,\
+    BASE_API_VERSION,\
+    DEVICES_API_VERSION,\
+    DEVICES_ENDPOINT,\
+    LOGIN_ENDPOINT
+
 from .device import MyQDevice
 from .errors import InvalidCredentialsError, RequestError
 
 _LOGGER = logging.getLogger(__name__)
-
-BASE_API_VERSION = 5
-API_BASE = "https://api.myqdevice.com/api/v{0}"
 
 DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
 # Generate random string for User Agent.
@@ -88,9 +94,8 @@ class API:  # pylint: disable=too-many-instance-attributes
             try:
                 _LOGGER.debug(f"Sending myq api request {url}")
                 async with self._websession.request(
-                        method, url, headers=request_headers, params=params, json=json) as resp:
+                        method, url, headers=request_headers, params=params, json=json, raise_for_status=True) as resp:
                     data = await resp.json(content_type=None)
-                    resp.raise_for_status()
                     return data
             except ClientError as err:
                 _LOGGER.debug(f"Attempt {attempt} request failed with exception:: {str(err)}")
@@ -115,6 +120,12 @@ class API:  # pylint: disable=too-many-instance-attributes
                     # Reset the attempt counter as we're now re-authenticated.
                     attempt = 0
                     continue
+            except JSONDecodeError as err:
+                message=f"JSON Decoder error {err.msg} in response at line {err.lineno} column {err.colno}. Response " \
+                        f"received was:\n{err.doc}"
+                _LOGGER.error(message)
+                raise RequestError(message)
+
 
         _LOGGER.error(message)
         raise RequestError(message)
@@ -131,7 +142,7 @@ class API:  # pylint: disable=too-many-instance-attributes
     ) -> dict:
         """Make a request."""
         api_base = API_BASE.format(api_version)
-        url = "{0}/{1}".format(api_base, endpoint)
+        url = f"{api_base}/{endpoint}"
 
         if not headers:
             headers = {}
@@ -173,7 +184,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         _LOGGER.debug("Sending authentication request to MyQ")
         auth_resp = await self.request(
             method="post",
-            endpoint="Login",
+            endpoint=LOGIN_ENDPOINT,
             json={"Username": username, "Password": password},
             login_request=True,
         )
@@ -191,7 +202,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         _LOGGER.debug("Retrieving account information")
         self._account_info = await self.request(
             method="get",
-            endpoint="My",
+            endpoint=ACCOUNT_INFORMATION_ENDPOINT,
             params={"expand": "account"}
         )
 
@@ -215,14 +226,17 @@ class API:  # pylint: disable=too-many-instance-attributes
         devices = []
         _LOGGER.debug("Retrieving accounts")
         accounts_resp = await self.request(
-            "get", "Accounts"
+            method="get",
+            endpoint=ACCOUNTS_ENDPOINT
         )
         if accounts_resp is not None and accounts_resp.get("Items") is not None:
             for account in accounts_resp["Items"]:
                 account_id = account["Id"]
                 _LOGGER.debug(f"Retrieving devices for account {account_id}")
                 devices_resp = await self.request(
-                    "get", "Accounts/{0}/Devices".format(account_id), api_version=DEVICES_API_VERSION
+                    method="get",
+                    endpoint=DEVICES_ENDPOINT.format(account_id),
+                    api_version=DEVICES_API_VERSION
                 )
                 if devices_resp is not None and devices_resp.get("items") is not None:
                     devices += devices_resp["items"]
@@ -230,7 +244,9 @@ class API:  # pylint: disable=too-many-instance-attributes
         if not devices:
             _LOGGER.debug("Retrieving device information")
             devices_resp = await self.request(
-                "get", "Accounts/{0}/Devices".format(self.account_id), api_version=DEVICES_API_VERSION
+                method="get",
+                endpoint=DEVICES_ENDPOINT.format(self.account_id),
+                api_version=DEVICES_API_VERSION
             )
 
             if devices_resp is not None and devices_resp.get("items") is not None:
@@ -243,7 +259,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         for device_json in devices:
             serial_number = device_json.get("serial_number")
             if serial_number is None:
-                _LOGGER.debug("No serial number for device with name {name}.".format(name=device_json.get("name")))
+                _LOGGER.debug(f"No serial number for device with name {device_json.get('name')}.")
                 continue
 
             if serial_number in self.devices:

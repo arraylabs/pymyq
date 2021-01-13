@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Optional
 
 from .errors import RequestError
 
-from .const import DEVICE_TYPE, DEVICES_API_VERSION
+from .const import ACTION_ENDPOINT, DEVICE_TYPE, DEVICES_API_VERSION
 
 if TYPE_CHECKING:
     from .api import API
@@ -104,7 +104,7 @@ class MyQDevice:
         # If the user tries to open or close, say, a gateway, throw an exception:
         if not self.state:
             raise RequestError(
-                "Cannot change state of device type: {0}".format(self.device_type)
+                f"Cannot change state of device type: {self.device_type}"
             )
 
         account_id = self._api.account_id
@@ -116,7 +116,7 @@ class MyQDevice:
         _LOGGER.debug(f"Sending command {state_command} for {self.name}")
         await self._api.request(
             method="put",
-            endpoint="Accounts/{0}/Devices/{1}/actions".format(
+            endpoint=ACTION_ENDPOINT.format(
                 account_id, self.device_id
             ),
             json={"action_type": state_command},
