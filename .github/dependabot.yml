@@ -1,0 +1,7 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    # Check for updates every weekday
+    schedule:
+      interval: "daily"
