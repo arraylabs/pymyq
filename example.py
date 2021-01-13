@@ -11,13 +11,15 @@ _LOGGER = logging.getLogger()
 
 EMAIL = "<EMAIL>"
 PASSWORD = "<PASSWORD>"
+OPEN_CLOSE = False
 
 async def main() -> None:
     """Create the aiohttp session and run the example."""
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     async with ClientSession() as websession:
         try:
             # Create an API object:
+            print(f"{EMAIL} {PASSWORD}")
             api = await login(EMAIL, PASSWORD, websession)
 
             # Get the account ID:
@@ -40,12 +42,14 @@ async def main() -> None:
                 _LOGGER.info("Close Allowed: %s", device.close_allowed)
                 _LOGGER.info("Current State: %s", device.state)
 
-                try:
-                    await device.open()
-                    await asyncio.sleep(15)
-                    await device.close()
-                except RequestError as err:
-                    _LOGGER.error(err)
+                if OPEN_CLOSE:
+                    try:
+                        await device.open()
+                        await asyncio.sleep(15)
+                        await device.close()
+                    except RequestError as err:
+                        _LOGGER.error(err)
+
         except MyQError as err:
             _LOGGER.error("There was an error: %s", err)
 
