@@ -26,7 +26,7 @@ requests-toolbelt==0.8.0
 requests==2.25.1
 six==1.11.0
 snowballstemmer==1.2.1
-tqdm==4.28.1
+tqdm==4.56.0
 twine==1.12.1
 typed-ast==1.1.0
 urllib3==1.26.2
