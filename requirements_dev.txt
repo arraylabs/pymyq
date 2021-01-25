@@ -1,6 +1,6 @@
 -i https://pypi.python.org/simple
 astroid==2.0.4
-bleach==3.1.4
+bleach==3.2.2
 certifi==2018.10.15
 cffi==1.11.5
 chardet==3.0.4
@@ -14,16 +14,16 @@ lazy-object-proxy==1.3.1
 mccabe==0.6.1
 mypy-extensions==0.4.1
 mypy==0.641
-pkginfo==1.4.2
+pkginfo==1.7.0
 pycodestyle==2.3.1
 pycparser==2.19
 pydocstyle==3.0.0
 pyflakes==1.6.0
 pygments==2.2.0
 pylint==2.1.1
-readme-renderer==22.0
+readme-renderer==28.0
 requests-toolbelt==0.8.0
-requests==2.20.0
+requests==2.25.1
 six==1.11.0
 snowballstemmer==1.2.1
 tqdm==4.28.1
