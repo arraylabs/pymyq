@@ -23,7 +23,7 @@ pygments==2.2.0
 pylint==2.1.1
 readme-renderer==22.0
 requests-toolbelt==0.8.0
-requests==2.20.0
+requests==2.25.1
 six==1.11.0
 snowballstemmer==1.2.1
 tqdm==4.28.1
