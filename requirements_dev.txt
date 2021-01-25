@@ -1,5 +1,5 @@
 -i https://pypi.python.org/simple
-astroid==2.0.4
+astroid==2.4.2
 bleach==3.2.2
 certifi==2018.10.15
 cffi==1.11.5
