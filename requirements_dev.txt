@@ -3,7 +3,7 @@ astroid==2.0.4
 bleach==3.2.2
 certifi==2018.10.15
 cffi==1.11.5
-chardet==3.0.4
+chardet==4.0.0
 cmarkgfm==0.4.2
 docutils==0.14
 flake8==3.5.0
