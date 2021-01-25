@@ -5,6 +5,6 @@ async_timeout>=3.0.1
 attrs==20.3.0
 chardet==3.0.4
 idna==2.7
-multidict==4.4.2
+multidict==5.1.0
 pycares==2.3.0
 yarl==1.2.6
