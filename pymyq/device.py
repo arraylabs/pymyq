@@ -1,41 +1,31 @@
 """Define MyQ devices."""
 import logging
-import re
 from typing import TYPE_CHECKING, Optional
 
+from .const import DEVICE_TYPE
 from .errors import RequestError
-
-from .const import ACTION_ENDPOINT, DEVICE_TYPE, DEVICES_API_VERSION
 
 if TYPE_CHECKING:
     from .api import API
 
 _LOGGER = logging.getLogger(__name__)
 
-COMMAND_CLOSE = "close"
-COMMAND_OPEN = "open"
-
-STATE_CLOSED = "closed"
-STATE_CLOSING = "closing"
-STATE_OPEN = "open"
-STATE_OPENING = "opening"
-STATE_STOPPED = "stopped"
-STATE_TRANSITION = "transition"
-STATE_UNKNOWN = "unknown"
-
 
 class MyQDevice:
     """Define a generic device."""
 
-    def __init__(self, api: "API", device_json: dict):
-        """Initialize."""
+    def __init__(self, api: "API", device_json: dict, account: str) -> None:
+        """Initialize.
+        :type account: str
+        """
         self._api = api
+        self._account = account
         self.device_json = device_json
 
     @property
-    def close_allowed(self) -> bool:
-        """Return whether the device can be closed unattended."""
-        return self.device_json["state"].get("is_unattended_close_allowed") is True
+    def account(self) -> str:
+        """Return account associated with device"""
+        return self._account
 
     @property
     def device_family(self) -> str:
@@ -73,33 +63,34 @@ class MyQDevice:
         return self.device_json["state"].get("online") is True
 
     @property
-    def open_allowed(self) -> bool:
-        """Return whether the device can be opened unattended."""
-        return self.device_json["state"].get("is_unattended_open_allowed") is True
-
-    @property
     def parent_device_id(self) -> Optional[str]:
         """Return the device ID (serial number) of this device's parent."""
         return self.device_json.get("parent_device_id")
-
-    @property
-    def state(self) -> Optional[str]:
-        """Return the current state of the device."""
-        return self.device_json["state"].get("door_state")
 
     @property
     def href(self) -> Optional[str]:
         """Return the hyperlinks of the device."""
         return self.device_json.get("href")
 
+    @property
+    def state(self) -> Optional[str]:
+        return None
+
     @state.setter
     def state(self, value: str) -> None:
-        """Set the current state of the device."""
-        if not self.device_json["state"].get("door_state"):
-            return
-        self.device_json["state"]["door_state"] = value
+        return
 
-    async def _send_state_command(self, state_command: str) -> None:
+    @property
+    def close_allowed(self) -> bool:
+        """Return whether the device can be closed unattended."""
+        return False
+
+    @property
+    def open_allowed(self) -> bool:
+        """Return whether the device can be opened unattended."""
+        return False
+
+    async def _send_state_command(self, url: str, command: str) -> None:
         """Instruct the API to change the state of the device."""
         # If the user tries to open or close, say, a gateway, throw an exception:
         if not self.state:
@@ -107,41 +98,12 @@ class MyQDevice:
                 f"Cannot change state of device type: {self.device_type}"
             )
 
-        account_id = self._api.account_id
-        if self.href is not None:
-            rule = r".*/accounts/(.*)/devices/(.*)"
-            infos = re.search(rule, self.href)
-            if infos is not None:
-                account_id = infos.group(1)
-        _LOGGER.debug(f"Sending command {state_command} for {self.name}")
+        _LOGGER.debug(f"Sending command {command} for {self.name}")
         await self._api.request(
             method="put",
-            endpoint=ACTION_ENDPOINT.format(
-                account_id, self.device_id
-            ),
-            json={"action_type": state_command},
-            api_version=DEVICES_API_VERSION
+            returns="response",
+            url=url,
         )
-
-    async def close(self) -> None:
-        """Close the device."""
-        if self.state in (STATE_CLOSED, STATE_CLOSING):
-            return
-
-        # Set the current state to "closing" right away (in case the user doesn't
-        # run update() before checking):
-        self.state = STATE_CLOSING
-        await self._send_state_command(COMMAND_CLOSE)
-
-    async def open(self) -> None:
-        """Open the device."""
-        if self.state in (STATE_OPEN, STATE_OPENING):
-            return
-
-        # Set the current state to "opening" right away (in case the user doesn't
-        # run update() before checking):
-        self.state = STATE_OPENING
-        await self._send_state_command(COMMAND_OPEN)
 
     async def update(self) -> None:
         """Get the latest info for this device."""

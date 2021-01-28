@@ -1,216 +1,363 @@
 """Define the MyQ API."""
 import asyncio
 import logging
-import string
 from datetime import datetime, timedelta
-from random import choices
-from typing import Dict, Optional
+from html.parser import HTMLParser
+from typing import Dict, Optional, Union, Tuple
+from urllib.parse import urlsplit, parse_qs
 
-from aiohttp import ClientSession
-from aiohttp.client_exceptions import ClientError
-from json import JSONDecodeError
+from aiohttp import ClientSession, ClientResponse
+from aiohttp.client_exceptions import ClientError, ClientResponseError
+from pkce import generate_code_verifier, get_code_challenge
 
-from .const import \
-    ACCOUNTS_ENDPOINT,\
-    ACCOUNT_INFORMATION_ENDPOINT,\
-    API_BASE,\
-    BASE_API_VERSION,\
-    DEVICES_API_VERSION,\
-    DEVICES_ENDPOINT,\
-    LOGIN_ENDPOINT
-
+from .const import (
+    ACCOUNTS_ENDPOINT,
+    DEVICES_ENDPOINT,
+    DEVICE_FAMILY_GARAGEDOOR,
+    DEVICE_FAMILY_GATEWAY,
+    DEVICE_FAMLY_LAMP,
+    OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
+    OAUTH_AUTHORIZE_URI,
+    OAUTH_BASE_URI,
+    OAUTH_TOKEN_URI,
+    OAUTH_REDIRECT_URI,
+)
 from .device import MyQDevice
-from .errors import InvalidCredentialsError, RequestError
+from .errors import AuthenticationError, InvalidCredentialsError, RequestError
+from .garagedoor import MyQGaragedoor
+from .lamp import MyQLamp
+from .request import MyQRequest, REQUEST_METHODS
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_APP_ID = "JVM/G9Nwih5BwKgNCjLxiFUQxQijAebyyg8QUHr7JOrP+tuPb8iHfRHKwTmDzHOu"
-# Generate random string for User Agent.
-DEFAULT_USER_AGENT = "".join(choices(string.ascii_letters + string.digits, k=5))
-DEFAULT_BRAND_ID = 2
-DEFAULT_REQUEST_RETRIES = 5
-DEFAULT_CULTURE = "en"
-MYQ_HEADERS = {
-    "Content-Type": "application/json",
-    "MyQApplicationId": DEFAULT_APP_ID,
-    "ApiVersion": str(DEVICES_API_VERSION),
-    "BrandId": str(DEFAULT_BRAND_ID),
-    "Culture": DEFAULT_CULTURE
-}
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
-NON_COVER_DEVICE_FAMILIES = "gateway"
+DEFAULT_TOKEN_REFRESH = timedelta(minutes=2)
+
+
+class HTMLElementFinder(HTMLParser):
+    def __init__(self, tag: str, return_attr: str, with_attr: (str, str) = None):
+        self._FindTag = tag
+        self._WithAttr = with_attr
+        self._ReturnAttr = return_attr
+        self._Result = []
+        HTMLParser.__init__(self)
+
+    @property
+    def result(self):
+        return self._Result
+
+    def handle_starttag(self, tag, attrs):
+        if tag == self._FindTag:
+            store_attr = False
+            if self._WithAttr is None:
+                store_attr = True
+            else:
+                for attr, value in attrs:
+                    if (attr, value) == self._WithAttr:
+                        store_attr = True
+                        break
+
+            if store_attr:
+                for attr, value in attrs:
+                    if attr == self._ReturnAttr:
+                        self._Result.append(value)
 
 
 class API:  # pylint: disable=too-many-instance-attributes
     """Define a class for interacting with the MyQ iOS App API."""
 
-    def __init__(self, websession: ClientSession = None) -> None:
+    def __init__(
+        self, username: str, password: str, websession: ClientSession = None
+    ) -> None:
         """Initialize."""
-        self._account_info = {}
-        self._credentials = {}
+        self.__credentials = {"username": username, "password": password}
+        self._codeverifier = None
         self._last_state_update = None  # type: Optional[datetime]
         self._lock = asyncio.Lock()
-        self._security_token = None  # type: Optional[str]
-        self._websession = websession
+        self._authenticate = asyncio.Lock()
+        self._security_token = (
+            None,
+            None,
+        )  # type: Tuple[Optional[str], Optional[datetime]]
+        self._myqrequests = MyQRequest(websession or ClientSession())
+        self.accounts = {}
         self.devices = {}  # type: Dict[str, MyQDevice]
 
     @property
-    def account_id(self) -> str:
-        """Return the account ID."""
-        return self._account_info["Account"]["Id"]
-
-    @property
-    def covers(self) -> Dict[str, MyQDevice]:
+    def covers(self) -> Dict[str, MyQGaragedoor]:
         """Return only those devices that are covers."""
         return {
             device_id: device
             for device_id, device in self.devices.items()
-            if device.device_json["device_family"] not in NON_COVER_DEVICE_FAMILIES
+            if device.device_json["device_family"] == DEVICE_FAMILY_GARAGEDOOR
         }
 
-    async def _send_request(
-        self,
-        method: str,
-        url: str,
-        headers: dict = None,
-        params: dict = None,
-        json: dict = None,
-        login_request: bool = False,
-    ) -> dict:
+    @property
+    def lamps(self) -> Dict[str, MyQDevice]:
+        """Return only those devices that are covers."""
+        return {
+            device_id: device
+            for device_id, device in self.devices.items()
+            if device.device_json["device_family"] == DEVICE_FAMLY_LAMP
+        }
 
-        attempt = 0
-        while attempt < DEFAULT_REQUEST_RETRIES - 1:
-            if attempt != 0:
-                wait_for = min(2 ** attempt, 5)
-                _LOGGER.warning(f"Device update failed; trying again in {wait_for} seconds")
-                await asyncio.sleep(wait_for)
+    @property
+    def gateways(self) -> Dict[str, MyQDevice]:
+        """Return only those devices that are covers."""
+        return {
+            device_id: device
+            for device_id, device in self.devices.items()
+            if device.device_json["device_family"] == DEVICE_FAMILY_GATEWAY
+        }
 
-            attempt += 1
-            data = {}
-            request_headers = headers
-            if not login_request:
-                request_headers["SecurityToken"] = self._security_token
+    @property
+    def _code_verifier(self) -> str:
+        if self._codeverifier is None:
+            self._codeverifier = generate_code_verifier(length=128)
+        return self._codeverifier
 
-            try:
-                _LOGGER.debug(f"Sending myq api request {url}")
-                async with self._websession.request(
-                        method, url, headers=request_headers, params=params, json=json, raise_for_status=True) as resp:
-                    data = await resp.json(content_type=None)
-                    return data
-            except ClientError as err:
-                _LOGGER.debug(f"Attempt {attempt} request failed with exception:: {str(err)}")
-                status_code = err.status if hasattr(err, "status") else ""
+    @property
+    def username(self) -> str:
+        return self.__credentials["username"]
 
-                message = f"Error requesting data from {url}: {str(status_code)} - {data.get('description', str(err))}"
-                if status_code == 401:
-                    if login_request:
-                        self._credentials = {}
-                        raise InvalidCredentialsError("Invalid username/password")
+    @username.setter
+    def username(self, username: str):
+        self.__credentials["username"] = username
 
-                    _LOGGER.debug(f"Security token has expired, re-authenticating to MyQ")
-                    try:
-                        await self.authenticate(self._credentials.get("username"),
-                                                self._credentials.get("password"),
-                                                True)
-                    except RequestError as auth_err:
-                        message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
-                        _LOGGER.error(message)
-                        raise RequestError(message)
+    @property
+    def password(self) -> None:
+        return None
 
-                    # Reset the attempt counter as we're now re-authenticated.
-                    attempt = 0
-                    continue
-            except JSONDecodeError as err:
-                message=f"JSON Decoder error {err.msg} in response at line {err.lineno} column {err.colno}. Response " \
-                        f"received was:\n{err.doc}"
-                _LOGGER.error(message)
-                raise RequestError(message)
-
-
-        _LOGGER.error(message)
-        raise RequestError(message)
+    @password.setter
+    def password(self, password: str):
+        self.__credentials["password"] = password
 
     async def request(
         self,
         method: str,
-        endpoint: str,
+        returns: str,
+        url: str,
         headers: dict = None,
         params: dict = None,
+        data: dict = None,
         json: dict = None,
+        allow_redirects: bool = True,
         login_request: bool = False,
-        api_version: str = BASE_API_VERSION,
-    ) -> dict:
+    ) -> (ClientResponse, Union[dict, str, None]):
         """Make a request."""
-        api_base = API_BASE.format(api_version)
-        url = f"{api_base}/{endpoint}"
+
+        # Determine the method to call based on what is to be returned.
+        call_method = REQUEST_METHODS.get(returns)
+        if call_method is None:
+            raise RequestError(f"Invalid return object requested: {returns}")
+
+        call_method = getattr(self._myqrequests, call_method)
+
+        if login_request:
+            try:
+                return await call_method(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    data=data,
+                    json=json,
+                    allow_redirects=allow_redirects,
+                )
+            except ClientResponseError as err:
+                message = (
+                    f"Error requesting data from {url}: {err.status} - {err.message}"
+                )
+                _LOGGER.error(message)
+                raise RequestError(message)
+
+            except ClientError as err:
+                message = f"Error requesting data from {url}: {str(err)}"
+                _LOGGER.error(message)
+                raise RequestError(message)
+
+        # Check if an authentication is in progress right now.
+        if self._authenticate.locked():
+            # Wait for the lock to be released before moving on.
+            await self._authenticate.acquire()
+            # And release it back, we just wanted to wait for it to complete.
+            self._authenticate.release()
+
+        # Check if token has to be refreshed.
+        if (
+            self._security_token[1] is None
+            or self._security_token[1] + DEFAULT_TOKEN_REFRESH <= datetime.utcnow()
+        ):
+            _LOGGER.debug(
+                f"Refreshing token, last refresh was {self._security_token[1]}"
+            )
+            try:
+                await self.authenticate()
+            except RequestError as auth_err:
+                message = (
+                    f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                )
+                _LOGGER.error(message)
+                raise AuthenticationError(message)
 
         if not headers:
             headers = {}
-        headers.update(MYQ_HEADERS)
 
         # The MyQ API can time out if multiple concurrent requests are made, so
         # ensure that only one gets through at a time.
         # Exception is when this is a login request AND there is already a lock, in that case
         # we're sending the request anyways as we know there is no active request now.
-        if login_request and self._lock.locked():
-            return await self._send_request(
-                method=method,
-                url=url,
-                headers=headers,
-                params=params,
-                json=json,
-                login_request=login_request,
-            )
+
+        headers["Authorization"] = self._security_token[0]
 
         async with self._lock:
-            return await self._send_request(
-                method=method,
-                url=url,
-                headers=headers,
-                params=params,
-                json=json,
-                login_request=login_request,
-            )
+            try:
+                return await call_method(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    data=data,
+                    json=json,
+                    allow_redirects=allow_redirects,
+                )
+            except ClientResponseError as err:
+                message = (
+                    f"Error requesting data from {url}: {err.status} - {err.message}"
+                )
+                _LOGGER.error(message)
+                raise RequestError(message)
 
+            except ClientError as err:
+                message = f"Error requesting data from {url}: {str(err)}"
+                _LOGGER.error(message)
+                raise RequestError(message)
 
-    async def authenticate(self, username: str, password: str, token_only = False) -> None:
-        """Authenticate and get a security token."""
-        if username is None or password is None:
-            _LOGGER.debug("No username/password, most likely due to previous failed authentication.")
-            return
+    async def _oauth_authenticate(self) -> str:
 
-        self._credentials = {"username": username, "password": password}
-        # Retrieve and store the initial security token:
-        _LOGGER.debug("Sending authentication request to MyQ")
-        auth_resp = await self.request(
-            method="post",
-            endpoint=LOGIN_ENDPOINT,
-            json={"Username": username, "Password": password},
+        # retrieve authentication page
+        _LOGGER.debug("Retrieving authentication page")
+        resp, text = await self.request(
+            method="get",
+            returns="text",
+            url=OAUTH_AUTHORIZE_URI,
+            headers={"redirect": "follow"},
+            params={
+                "client_id": OAUTH_CLIENT_ID,
+                "code_challenge": get_code_challenge(self._code_verifier),
+                "code_challenge_method": "S256",
+                "redirect_uri": OAUTH_REDIRECT_URI,
+                "response_type": "code",
+                "scope": "MyQ_Residential offline_access",
+            },
             login_request=True,
         )
-        self._security_token = auth_resp.get("SecurityToken")
-        if self._security_token is None:
-            _LOGGER.debug("No security token received.")
-            raise RequestError(
-                "Authentication response did not contain a security token yet one is expected."
-            )
 
-        if token_only:
-            return
-
-        # Retrieve and store account info:
-        _LOGGER.debug("Retrieving account information")
-        self._account_info = await self.request(
-            method="get",
-            endpoint=ACCOUNT_INFORMATION_ENDPOINT,
-            params={"expand": "account"}
+        # Perform login to MyQ
+        _LOGGER.debug("Performing login to MyQ")
+        parser = HTMLElementFinder(
+            tag="input",
+            return_attr="value",
+            with_attr=("name", "__RequestVerificationToken"),
         )
 
-        # Retrieve and store initial set of devices:
-        _LOGGER.debug("Retrieving MyQ information")
-        await self.update_device_info()
+        parser.feed(text)
+        request_verification_token = parser.result[0]
 
-    async def update_device_info(self) -> dict:
+        resp, _ = await self.request(
+            method="post",
+            returns="response",
+            url=resp.url,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Cookie": resp.cookies.output(attrs=[]),
+                "User-Agent": "null",
+            },
+            data={
+                "Email": self.username,
+                "Password": self.__credentials.get("password"),
+                "__RequestVerificationToken": request_verification_token,
+            },
+            allow_redirects=False,
+            login_request=True,
+        )
+
+        if len(resp.cookies) < 2:
+            message = (
+                "Invalid MyQ credentials provided. Please recheck login and password."
+            )
+            _LOGGER.error(message)
+            raise InvalidCredentialsError(message)
+
+        # Intercept redirect back to MyQ iOS app
+        _LOGGER.debug("Calling redirect page")
+        resp, _ = await self.request(
+            method="get",
+            returns="response",
+            url=f"{OAUTH_BASE_URI}{resp.headers['Location']}",
+            headers={
+                "Cookie": resp.cookies.output(attrs=[]),
+                "User-Agent": "null",
+            },
+            allow_redirects=False,
+            login_request=True,
+        )
+
+        # Retrieve token
+        _LOGGER.debug("Getting token")
+        redirect_url = f"{OAUTH_BASE_URI}{resp.headers['Location']}"
+
+        resp, data = await self.request(
+            returns="json",
+            method="post",
+            url=OAUTH_TOKEN_URI,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "null",
+            },
+            data={
+                "client_id": OAUTH_CLIENT_ID,
+                "client_secret": OAUTH_CLIENT_SECRET,
+                "code": parse_qs(urlsplit(redirect_url).query).get("code", ""),
+                "code_verifier": self._code_verifier,
+                "grant_type": "authorization_code",
+                "redirect_uri": OAUTH_REDIRECT_URI,
+                "scope": parse_qs(urlsplit(redirect_url).query).get(
+                    "code", "MyQ_Residential offline_access"
+                ),
+            },
+            login_request=True,
+        )
+
+        token = f"{data.get('token_type')} {data.get('access_token')}"
+
+        return token
+
+    async def authenticate(self) -> None:
+        """Authenticate and get a security token."""
+        if self.username is None or self.__credentials["password"] is None:
+            _LOGGER.debug(
+                "No username/password, most likely due to previous failed authentication."
+            )
+            return
+
+        async with self._authenticate:
+            # Retrieve and store the initial security token:
+            _LOGGER.debug("Initiating OAuth authentication")
+            self._security_token = (
+                await self._oauth_authenticate(),
+                self._security_token[1],
+            )
+
+            if self._security_token[0] is None:
+                _LOGGER.debug("No security token received.")
+                raise RequestError(
+                    "Authentication response did not contain a security token yet one is expected."
+                )
+            self._security_token = (self._security_token[0], datetime.utcnow())
+
+    async def update_device_info(self) -> Optional[dict]:
         """Get up-to-date device info."""
         # The MyQ API can time out if state updates are too frequent; therefore,
         # if back-to-back requests occur within a threshold, respond to only the first:
@@ -223,95 +370,89 @@ class API:  # pylint: disable=too-many-instance-attributes
             _LOGGER.debug("Ignoring subsequent request within throttle window")
             return
 
-        devices = []
         _LOGGER.debug("Retrieving accounts")
-        accounts_resp = await self.request(
-            method="get",
-            endpoint=ACCOUNTS_ENDPOINT
+        _, accounts_resp = await self.request(
+            method="get", returns="json", url=ACCOUNTS_ENDPOINT
         )
-        if accounts_resp is not None and accounts_resp.get("Items") is not None:
-            for account in accounts_resp["Items"]:
-                account_id = account["Id"]
-                _LOGGER.debug(f"Retrieving devices for account {account_id}")
-                devices_resp = await self.request(
-                    method="get",
-                    endpoint=DEVICES_ENDPOINT.format(account_id),
-                    api_version=DEVICES_API_VERSION
-                )
-                if devices_resp is not None and devices_resp.get("items") is not None:
-                    devices += devices_resp["items"]
+        self.accounts = {}
+        if accounts_resp is not None and accounts_resp.get("accounts") is not None:
+            for account in accounts_resp["accounts"]:
+                account_id = account.get("id")
+                if account_id is not None:
+                    _LOGGER.debug(
+                        f"Got account {account_id} with name {account.get('name')}"
+                    )
+                    self.accounts.update({account_id: account.get("name")})
+        else:
+            _LOGGER.debug(f"No accounts found")
+            self.devices = []
 
-        if not devices:
-            _LOGGER.debug("Retrieving device information")
-            devices_resp = await self.request(
+        for account in self.accounts:
+            _LOGGER.debug(f"Retrieving devices for account {self.accounts[account]}")
+            _, devices_resp = await self.request(
                 method="get",
-                endpoint=DEVICES_ENDPOINT.format(self.account_id),
-                api_version=DEVICES_API_VERSION
+                returns="json",
+                url=DEVICES_ENDPOINT.format(account_id=account),
             )
 
             if devices_resp is not None and devices_resp.get("items") is not None:
-                devices += devices_resp["items"]
+                for device in devices_resp.get("items"):
+                    serial_number = device.get("serial_number")
+                    if serial_number is None:
+                        _LOGGER.debug(
+                            f"No serial number for device with name {device.get('name')}."
+                        )
+                        continue
 
-        if not devices:
-            _LOGGER.debug("Response did not contain any devices, no updates.")
-            return
-
-        for device_json in devices:
-            serial_number = device_json.get("serial_number")
-            if serial_number is None:
-                _LOGGER.debug(f"No serial number for device with name {device_json.get('name')}.")
-                continue
-
-            if serial_number in self.devices:
-                device = self.devices[serial_number]
-                device.device_json = device_json
+                    if serial_number in self.devices:
+                        _LOGGER.debug(
+                            f"Updating information for device with serial number {serial_number}"
+                        )
+                        myqdevice = self.devices[serial_number]
+                        myqdevice.device_json = device
+                    else:
+                        if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
+                            _LOGGER.debug(
+                                f"Adding new garage door with serial number {serial_number}"
+                            )
+                            self.devices[serial_number] = MyQGaragedoor(
+                                api=self, account=account, device_json=device
+                            )
+                        elif device.get("device_family") == DEVICE_FAMLY_LAMP:
+                            _LOGGER.debug(
+                                f"Adding new lamp with serial number {serial_number}"
+                            )
+                            self.devices[serial_number] = MyQLamp(
+                                api=self, account=account, device_json=device
+                            )
+                        elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
+                            _LOGGER.debug(
+                                f"Adding new gateway with serial number {serial_number}"
+                            )
+                            self.devices[serial_number] = MyQDevice(
+                                api=self, account=account, device_json=device
+                            )
+                        else:
+                            _LOGGER.warning(
+                                f"Unknown device family {device.get('device_family')}"
+                            )
             else:
-                self.devices[device_json["serial_number"]] = MyQDevice(
-                    self, device_json
-                )
+                _LOGGER.debug(f"No devices found for account {self.accounts[account]}")
+                self.devices = []
 
         self._last_state_update = datetime.utcnow()
 
 
-async def login(username: str, password: str, websession: ClientSession = None, useragent: str = None) -> API:
+async def login(username: str, password: str, websession: ClientSession = None) -> API:
     """Log in to the API."""
-    if useragent is None:
-            # Retrieve user agent from GitHub if not provided for login.
-            _LOGGER.debug("No user agent provided, trying to retrieve from GitHub.")
-            url = f"https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
-
-            try:
-                async with ClientSession() as session:
-                    async with session.get(url) as resp:
-                        useragent = await resp.text()
-                        resp.raise_for_status()
-                        _LOGGER.debug(f"Retrieved user agent {useragent} from GitHub.")
-
-            except ClientError as exc:
-                # Default user agent to random string with length of 5 if failure to retrieve it from GitHub.
-                useragent = "#RANDOM:5"
-                _LOGGER.warning(f"Failed retrieving user agent from GitHub, will use randomized user agent "
-                                f"instead: {str(exc)}")
-    else:
-        _LOGGER.debug(f"Received user agent {useragent}.")
-
-    # Check if value for useragent is to create a random user agent.
-    useragent_list = useragent.split(":")
-    if useragent_list[0] == "#RANDOM":
-        # Create a random string, check if length is provided for the random string, if not then default is 5.
-        try:
-            randomlength = int(useragent_list[1]) if len(useragent_list) == 2 else 5
-        except ValueError:
-            _LOGGER.debug(f"Random length value {useragent_list[1]} in user agent {useragent} is not an integer. "
-                          f"Setting to 5 instead.")
-            randomlength = 5
-
-        # Create the random user agent.
-        useragent = "".join(choices(string.ascii_letters + string.digits, k=randomlength))
-        _LOGGER.debug(f"User agent set to randomized value: {useragent}.")
 
     # Set the user agent in the headers.
-    MYQ_HEADERS.update({"User-Agent": useragent})
-    api = API(websession)
-    await api.authenticate(username, password, False)
+    api = API(username, password, websession)
+    _LOGGER.debug("Performing initial authentication inyo MyQ")
+    await api.authenticate()
+
+    # Retrieve and store initial set of devices:
+    _LOGGER.debug("Retrieving MyQ information")
+    await api.update_device_info()
+
     return api
