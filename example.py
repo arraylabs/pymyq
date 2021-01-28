@@ -6,12 +6,13 @@ from aiohttp import ClientSession
 
 from pymyq import login
 from pymyq.errors import MyQError, RequestError
+from pymyq.garagedoor import STATE_OPEN, STATE_CLOSED
 
 _LOGGER = logging.getLogger()
 
 EMAIL = "<EMAIL>"
 PASSWORD = "<PASSWORD>"
-OPEN_CLOSE = False
+OPEN_CLOSE = True
 
 
 def print_info(number: int, device):
@@ -62,13 +63,30 @@ async def main() -> None:
                         if OPEN_CLOSE:
                             try:
                                 if device.open_allowed:
-                                    print(f"Opening garage door {device.name}")
-                                    await device.open()
+                                    if device.state == STATE_OPEN:
+                                        print(f"Garage door {device.name} is already open")
+                                    else:
+                                        print(f"Opening garage door {device.name}")
+                                        if await device.open(wait_for_state=True):
+                                            print(f"Garage door {device.name} has been opened.")
+                                        else:
+                                            print(f"Failed to open garage door {device.name}.")
+                                else:
+                                    print(f"Opening of garage door {device.name} is not allowed.")
+
                                 if device.open_allowed and device.close_allowed:
-                                    await asyncio.sleep(15)
+                                    await asyncio.sleep(5)
+
                                 if device.close_allowed:
-                                    print(f"Closing garage door {device.name}")
-                                    await device.close()
+                                    if device.state == STATE_CLOSED:
+                                        print(f"Garage door {device.name} is already closed")
+                                    else:
+                                        print(f"Closing garage door {device.name}")
+                                        if await device.close(wait_for_state=True):
+                                            print(f"Garage door {device.name} has been closed.")
+                                        else:
+                                            print(f"Failed to close garage door {device.name}.")
+
                             except RequestError as err:
                                 _LOGGER.error(err)
                     print("  ------------------------------")
