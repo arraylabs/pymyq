@@ -14,7 +14,6 @@ EMAIL = "<EMAIL>"
 PASSWORD = "<PASSWORD>"
 OPEN_CLOSE = True
 
-
 def print_info(number: int, device):
     print(f"      Device {number + 1}: {device.name}")
     print(f"      Device Online: {device.online}")
