@@ -1,6 +1,7 @@
 """Define MyQ devices."""
 import logging
 from asyncio import sleep as asyncio_sleep
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from .device import MyQDevice

@@ -1,5 +1,6 @@
 """Define MyQ devices."""
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from .const import DEVICE_TYPE
