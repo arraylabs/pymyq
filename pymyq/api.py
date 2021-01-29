@@ -31,7 +31,7 @@ from .request import MyQRequest, REQUEST_METHODS
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
+DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=20)
 DEFAULT_TOKEN_REFRESH = timedelta(minutes=2)
 
 
@@ -367,10 +367,10 @@ class API:  # pylint: disable=too-many-instance-attributes
         next_available_call_dt = self._last_state_update + DEFAULT_STATE_UPDATE_INTERVAL
 
         if call_dt < next_available_call_dt:
-            _LOGGER.debug("Ignoring subsequent request within throttle window")
+            _LOGGER.debug("Ignoring device update request as it is within throttle window")
             return
 
-        _LOGGER.debug("Retrieving accounts")
+        _LOGGER.debug("Updating device information, starting with retrieving accounts")
         _, accounts_resp = await self.request(
             method="get", returns="json", url=ACCOUNTS_ENDPOINT
         )
@@ -448,7 +448,7 @@ async def login(username: str, password: str, websession: ClientSession = None) 
 
     # Set the user agent in the headers.
     api = API(username, password, websession)
-    _LOGGER.debug("Performing initial authentication inyo MyQ")
+    _LOGGER.debug("Performing initial authentication into MyQ")
     await api.authenticate()
 
     # Retrieve and store initial set of devices:
