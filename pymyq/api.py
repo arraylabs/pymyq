@@ -115,7 +115,7 @@ class API:  # pylint: disable=too-many-instance-attributes
     @property
     def _code_verifier(self) -> str:
         if self._codeverifier is None:
-            self._codeverifier = generate_code_verifier(length=128)
+            self._codeverifier = generate_code_verifier(length=43)
         return self._codeverifier
 
     @property
@@ -243,7 +243,10 @@ class API:  # pylint: disable=too-many-instance-attributes
             method="get",
             returns="text",
             url=OAUTH_AUTHORIZE_URI,
-            headers={"redirect": "follow"},
+            headers={
+                "redirect": "follow",
+                "User-Agent": "null",
+            },
             params={
                 "client_id": OAUTH_CLIENT_ID,
                 "code_challenge": get_code_challenge(self._code_verifier),
@@ -360,7 +363,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 )
 
             _LOGGER.debug(f"Received token that will expire in {expires} seconds")
-            self._security_token = (token, datetime.utcnow()+timedelta(seconds=int(expires/2)), datetime.utcnow())
+            self._security_token = (token, datetime.utcnow()+timedelta(seconds=int(expires/2)), datetime.now())
 
     async def update_device_info(self) -> Optional[dict]:
         """Get up-to-date device info."""
