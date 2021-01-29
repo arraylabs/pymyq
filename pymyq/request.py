@@ -41,7 +41,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
             if attempt != 0:
                 wait_for = min(2 ** attempt, 5)
                 _LOGGER.warning(f'Request failed with "{last_status} {last_error}" '
-                                f'(attempt #{attempt}/{DEFAULT_REQUEST_RETRIES})"; trying again in {wait_for} seconds')'
+                                f'(attempt #{attempt}/{DEFAULT_REQUEST_RETRIES})"; trying again in {wait_for} seconds')
                 await asyncio.sleep(wait_for)
 
             attempt += 1
