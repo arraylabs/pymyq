@@ -193,13 +193,14 @@ class API:  # pylint: disable=too-many-instance-attributes
                 self._authentication_task is not None
                 and self._authentication_task.done()
             ):
+                _LOGGER.debug("Scheduled token refresh completed, ensuring no exception.")
                 try:
                     # Get the result so any exception is raised.
                     self._authentication_task.result()
                 except asyncio.CancelledError:
                     pass
                 except (RequestError, AuthenticationError) as auth_err:
-                    message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                    message = f"Scheduled token refresh failed: {str(auth_err)}"
                     _LOGGER.error(message)
                 self._authentication_task = None
 
@@ -232,7 +233,9 @@ class API:  # pylint: disable=too-many-instance-attributes
                         # If we do not have a token then raise error. But if we have a token then we'll continue
                         # the request in hopes that our existing token will still work.
                         if self._security_token[0] is None:
+                            self._authentication_task = None
                             raise AuthenticationError(message)
+                    self._authentication_task = None
                 else:
                     # We still have a token, we can continue this request with that token and schedule
                     # task to refresh token unless one is already running
