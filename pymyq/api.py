@@ -359,7 +359,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 )
 
             _LOGGER.debug(f"Received token that will expire in {expires} seconds")
-            self._security_token = (self._security_token[0], datetime.utcnow()+timedelta(seconds=int(expires/2)))
+            self._security_token = (token, datetime.utcnow()+timedelta(seconds=int(expires/2)))
 
     async def update_device_info(self) -> Optional[dict]:
         """Get up-to-date device info."""
