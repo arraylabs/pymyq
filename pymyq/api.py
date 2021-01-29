@@ -32,7 +32,7 @@ from .request import MyQRequest, REQUEST_METHODS
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=20)
-DEFAULT_TOKEN_REFRESH = timedelta(minutes=30)
+DEFAULT_TOKEN_REFRESH = 10*60  # 10 minutes
 
 
 class HTMLElementFinder(HTMLParser):
