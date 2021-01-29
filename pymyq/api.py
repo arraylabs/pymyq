@@ -32,7 +32,7 @@ from .request import MyQRequest, REQUEST_METHODS
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=20)
-DEFAULT_TOKEN_REFRESH = 10*60  # 10 minutes
+DEFAULT_TOKEN_REFRESH = 10 * 60  # 10 minutes
 
 
 class HTMLElementFinder(HTMLParser):
@@ -68,17 +68,16 @@ class API:  # pylint: disable=too-many-instance-attributes
     """Define a class for interacting with the MyQ iOS App API."""
 
     def __init__(
-        self, username: str, password: str, websession: ClientSession = None, loop = None
+        self, username: str, password: str, websession: ClientSession = None
     ) -> None:
         """Initialize."""
         self.__credentials = {"username": username, "password": password}
         self._myqrequests = MyQRequest(websession or ClientSession())
-        self._loop = loop
         self._authentication_task = None
         self._codeverifier = None
-        self._last_state_update = None  # type: Optional[datetime]
         self._lock = asyncio.Lock()
         self._authenticate = asyncio.Lock()
+        self._update = asyncio.Lock()
         self._security_token = (
             None,
             None,
@@ -87,6 +86,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         self.accounts = {}
         self.devices = {}  # type: Dict[str, MyQDevice]
+        self.last_state_update = None  # type: Optional[datetime]
 
     @property
     def covers(self) -> Dict[str, MyQGaragedoor]:
@@ -158,6 +158,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         call_method = getattr(self._myqrequests, call_method)
 
+        # if this is a request as part of authentication to have it go through in parallel.
         if login_request:
             try:
                 return await call_method(
@@ -181,16 +182,21 @@ class API:  # pylint: disable=too-many-instance-attributes
                 _LOGGER.error(message)
                 raise RequestError(message)
 
+        # The MyQ API can time out if multiple concurrent requests are made, so
+        # ensure that only one gets through at a time.
+        # Exception is when this is a login request AND there is already a lock, in that case
+        # we're sending the request anyways as we know there is no active request now.
         async with self._lock:
 
             # If we had something for an authentication task and it is done then get the result and clear it out.
-            if self._authentication_task is not None and self._authentication_task.done():
+            if (
+                self._authentication_task is not None
+                and self._authentication_task.done()
+            ):
                 try:
                     await self._authentication_task.result()
                 except (RequestError, AuthenticationError) as auth_err:
-                    message = (
-                        f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
-                    )
+                    message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
                     _LOGGER.error(message)
                 self._authentication_task = None
 
@@ -199,41 +205,48 @@ class API:  # pylint: disable=too-many-instance-attributes
                 self._security_token[1] is None
                 or self._security_token[1] <= datetime.utcnow()
             ):
+                # Token has to be refreshed, do we have a token right now?
                 if self._security_token[0] is None:
                     # We need a token, is an authentication task already running?
                     if self._authentication_task is None:
                         # It is not, start running one now.
-                        _LOGGER.debug(f"Refreshing token now, last refresh was {self._security_token[2]}")
-                        self._authentication_task = asyncio.create_task(self.authenticate(), name="MyQ_Authenticate")
+                        _LOGGER.debug(
+                            f"Refreshing token now, last refresh was {self._security_token[2]}"
+                        )
+                        self._authentication_task = asyncio.create_task(
+                            self.authenticate(), name="MyQ_Authenticate"
+                        )
 
                     # Wait for authentication task to be completed.
-                    _LOGGER.debug(f"Waiting for updated token, last refresh was {self._security_token[2]}")
+                    _LOGGER.debug(
+                        f"Waiting for updated token, last refresh was {self._security_token[2]}"
+                    )
                     try:
                         await self._authentication_task
                     except (RequestError, AuthenticationError) as auth_err:
-                            message = (
-                                f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
-                            )
-                            _LOGGER.error(message)
-                            # If we do not have a token then raise error. But if we have a token then we'll continue the request
-                            # in hopes that our existing token will still work.
-                            if self._security_token[0] is None:
-                                raise AuthenticationError(message)
+                        message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                        _LOGGER.error(message)
+                        # If we do not have a token then raise error. But if we have a token then we'll continue
+                        # the request in hopes that our existing token will still work.
+                        if self._security_token[0] is None:
+                            raise AuthenticationError(message)
                 else:
-                    if self._authentication_task is not None:
-                        _LOGGER.debug(f"Scheduling token refresh, last refresh was {self._security_token[2]}")
-                        self._authentication_task = asyncio.create_task(self.authenticate(), name="MyQ_Authenticate")
+                    # We still have a token, we can continue this request with that token and schedule
+                    # task to refresh token unless one is already running
+                    if self._authentication_task is None:
+                        _LOGGER.debug(
+                            f"Scheduling token refresh, last refresh was {self._security_token[2]}"
+                        )
+                        self._authentication_task = asyncio.create_task(
+                            self.authenticate(), name="MyQ_Authenticate"
+                        )
 
             if not headers:
                 headers = {}
 
-            # The MyQ API can time out if multiple concurrent requests are made, so
-            # ensure that only one gets through at a time.
-            # Exception is when this is a login request AND there is already a lock, in that case
-            # we're sending the request anyways as we know there is no active request now.
-
             headers["Authorization"] = self._security_token[0]
 
+            # Do the request
             try:
                 return await call_method(
                     method=method,
@@ -253,8 +266,12 @@ class API:  # pylint: disable=too-many-instance-attributes
                 if err.status == 401:
                     # Received unauthorized, reset token and start task to get a new one.
                     self._security_token = (None, None, self._security_token[2])
-                    _LOGGER.debug(f"Scheduling token refresh, last refresh was {self._security_token[2]}")
-                    self._authentication_task = asyncio.create_task(self.authenticate(), name="MyQ_Authenticate")
+                    _LOGGER.debug(
+                        f"Scheduling token refresh, last refresh was {self._security_token[2]}"
+                    )
+                    self._authentication_task = asyncio.create_task(
+                        self.authenticate(), name="MyQ_Authenticate"
+                    )
 
                 raise RequestError(message)
 
@@ -293,6 +310,8 @@ class API:  # pylint: disable=too-many-instance-attributes
             with_attr=("name", "__RequestVerificationToken"),
         )
 
+        # Verification token is within the returned page as <input name="__RequestVerificationToken" value=<token>>
+        # Retrieve token from the page.
         parser.feed(text)
         request_verification_token = parser.result[0]
 
@@ -314,6 +333,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             login_request=True,
         )
 
+        # We're supposed to receive back at least 2 cookies. If not then authentication failed.
         if len(resp.cookies) < 2:
             message = (
                 "Invalid MyQ credentials provided. Please recheck login and password."
@@ -363,14 +383,18 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         token = f"{data.get('token_type')} {data.get('access_token')}"
         try:
-            expires = int(data.get('expires_in', DEFAULT_TOKEN_REFRESH))
+            expires = int(data.get("expires_in", DEFAULT_TOKEN_REFRESH))
         except ValueError:
-            _LOGGER.debug(f"Expires {data.get('expires_in')} received is not an integer, using default.")
-            expires = DEFAULT_TOKEN_REFRESH*2
+            _LOGGER.debug(
+                f"Expires {data.get('expires_in')} received is not an integer, using default."
+            )
+            expires = DEFAULT_TOKEN_REFRESH * 2
 
-        if expires < DEFAULT_TOKEN_REFRESH*2:
-            _LOGGER.debug(f"Expires {expires} is less then default {DEFAULT_TOKEN_REFRESH}, setting to default instead.")
-            expires = DEFAULT_TOKEN_REFRESH*2
+        if expires < DEFAULT_TOKEN_REFRESH * 2:
+            _LOGGER.debug(
+                f"Expires {expires} is less then default {DEFAULT_TOKEN_REFRESH}, setting to default instead."
+            )
+            expires = DEFAULT_TOKEN_REFRESH * 2
 
         return token, expires
 
@@ -382,6 +406,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             )
             return
 
+        # We should not have multiple authentication tasks, but if we do then ensure that only 1 can run at a time.
         async with self._authenticate:
             # Retrieve and store the initial security token:
             _LOGGER.debug("Initiating OAuth authentication")
@@ -394,92 +419,119 @@ class API:  # pylint: disable=too-many-instance-attributes
                 )
 
             _LOGGER.debug(f"Received token that will expire in {expires} seconds")
-            self._security_token = (token, datetime.utcnow()+timedelta(seconds=int(expires/2)), datetime.now())
+            self._security_token = (
+                token,
+                datetime.utcnow() + timedelta(seconds=int(expires / 2)),
+                datetime.now(),
+            )
 
     async def update_device_info(self) -> Optional[dict]:
         """Get up-to-date device info."""
         # The MyQ API can time out if state updates are too frequent; therefore,
-        # if back-to-back requests occur within a threshold, respond to only the first:
-        call_dt = datetime.utcnow()
-        if not self._last_state_update:
-            self._last_state_update = call_dt - DEFAULT_STATE_UPDATE_INTERVAL
-        next_available_call_dt = self._last_state_update + DEFAULT_STATE_UPDATE_INTERVAL
-
-        if call_dt < next_available_call_dt:
-            _LOGGER.debug("Ignoring device update request as it is within throttle window")
-            return
-
-        _LOGGER.debug("Updating device information, starting with retrieving accounts")
-        _, accounts_resp = await self.request(
-            method="get", returns="json", url=ACCOUNTS_ENDPOINT
-        )
-        self.accounts = {}
-        if accounts_resp is not None and accounts_resp.get("accounts") is not None:
-            for account in accounts_resp["accounts"]:
-                account_id = account.get("id")
-                if account_id is not None:
-                    _LOGGER.debug(
-                        f"Got account {account_id} with name {account.get('name')}"
-                    )
-                    self.accounts.update({account_id: account.get("name")})
-        else:
-            _LOGGER.debug(f"No accounts found")
-            self.devices = []
-
-        for account in self.accounts:
-            _LOGGER.debug(f"Retrieving devices for account {self.accounts[account]}")
-            _, devices_resp = await self.request(
-                method="get",
-                returns="json",
-                url=DEVICES_ENDPOINT.format(account_id=account),
+        # if back-to-back requests occur within a threshold, respond to only the first
+        # Ensure only 1 update task can run at a time.
+        async with self._update:
+            call_dt = datetime.utcnow()
+            if not self.last_state_update:
+                self.last_state_update = call_dt - DEFAULT_STATE_UPDATE_INTERVAL
+            next_available_call_dt = (
+                self.last_state_update + DEFAULT_STATE_UPDATE_INTERVAL
             )
 
-            if devices_resp is not None and devices_resp.get("items") is not None:
-                for device in devices_resp.get("items"):
-                    serial_number = device.get("serial_number")
-                    if serial_number is None:
-                        _LOGGER.debug(
-                            f"No serial number for device with name {device.get('name')}."
-                        )
-                        continue
+            if call_dt < next_available_call_dt:
+                _LOGGER.debug(
+                    "Ignoring device update request as it is within throttle window"
+                )
+                return
 
-                    if serial_number in self.devices:
+            _LOGGER.debug(
+                "Updating device information, starting with retrieving accounts"
+            )
+            _, accounts_resp = await self.request(
+                method="get", returns="json", url=ACCOUNTS_ENDPOINT
+            )
+            self.accounts = {}
+            if accounts_resp is not None and accounts_resp.get("accounts") is not None:
+                for account in accounts_resp["accounts"]:
+                    account_id = account.get("id")
+                    if account_id is not None:
                         _LOGGER.debug(
-                            f"Updating information for device with serial number {serial_number}"
+                            f"Got account {account_id} with name {account.get('name')}"
                         )
-                        myqdevice = self.devices[serial_number]
-                        myqdevice.device_json = device
-                    else:
-                        if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
-                            _LOGGER.debug(
-                                f"Adding new garage door with serial number {serial_number}"
-                            )
-                            self.devices[serial_number] = MyQGaragedoor(
-                                api=self, account=account, device_json=device
-                            )
-                        elif device.get("device_family") == DEVICE_FAMLY_LAMP:
-                            _LOGGER.debug(
-                                f"Adding new lamp with serial number {serial_number}"
-                            )
-                            self.devices[serial_number] = MyQLamp(
-                                api=self, account=account, device_json=device
-                            )
-                        elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
-                            _LOGGER.debug(
-                                f"Adding new gateway with serial number {serial_number}"
-                            )
-                            self.devices[serial_number] = MyQDevice(
-                                api=self, account=account, device_json=device
-                            )
-                        else:
-                            _LOGGER.warning(
-                                f"Unknown device family {device.get('device_family')}"
-                            )
+                        self.accounts.update({account_id: account.get("name")})
             else:
-                _LOGGER.debug(f"No devices found for account {self.accounts[account]}")
+                _LOGGER.debug(f"No accounts found")
                 self.devices = []
 
-        self._last_state_update = datetime.utcnow()
+            for account in self.accounts:
+                _LOGGER.debug(
+                    f"Retrieving devices for account {self.accounts[account]}"
+                )
+                _, devices_resp = await self.request(
+                    method="get",
+                    returns="json",
+                    url=DEVICES_ENDPOINT.format(account_id=account),
+                )
+
+                state_update = datetime.utcnow()
+                if devices_resp is not None and devices_resp.get("items") is not None:
+                    for device in devices_resp.get("items"):
+                        serial_number = device.get("serial_number")
+                        if serial_number is None:
+                            _LOGGER.debug(
+                                f"No serial number for device with name {device.get('name')}."
+                            )
+                            continue
+
+                        if serial_number in self.devices:
+                            _LOGGER.debug(
+                                f"Updating information for device with serial number {serial_number}"
+                            )
+                            myqdevice = self.devices[serial_number]
+                            myqdevice.device_json = device
+                            myqdevice.state_update = state_update
+                        else:
+                            if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
+                                _LOGGER.debug(
+                                    f"Adding new garage door with serial number {serial_number}"
+                                )
+                                self.devices[serial_number] = MyQGaragedoor(
+                                    api=self,
+                                    account=account,
+                                    device_json=device,
+                                    state_update=state_update,
+                                )
+                            elif device.get("device_family") == DEVICE_FAMLY_LAMP:
+                                _LOGGER.debug(
+                                    f"Adding new lamp with serial number {serial_number}"
+                                )
+                                self.devices[serial_number] = MyQLamp(
+                                    api=self,
+                                    account=account,
+                                    device_json=device,
+                                    state_update=state_update,
+                                )
+                            elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
+                                _LOGGER.debug(
+                                    f"Adding new gateway with serial number {serial_number}"
+                                )
+                                self.devices[serial_number] = MyQDevice(
+                                    api=self,
+                                    account=account,
+                                    device_json=device,
+                                    state_update=state_update,
+                                )
+                            else:
+                                _LOGGER.warning(
+                                    f"Unknown device family {device.get('device_family')}"
+                                )
+                else:
+                    _LOGGER.debug(
+                        f"No devices found for account {self.accounts[account]}"
+                    )
+                    self.devices = []
+
+            self.last_state_update = datetime.utcnow()
 
 
 async def login(username: str, password: str, websession: ClientSession = None) -> API:

@@ -20,11 +20,11 @@ STATE_OFF = "off"
 class MyQLamp(MyQDevice):
     """Define a generic device."""
 
-    def __init__(self, api: "API", device_json: dict, account: str) -> None:
+    def __init__(self, api: "API", device_json: dict, account: str, state_update: datetime) -> None:
         """Initialize.
         :type account: str
         """
-        super().__init__(api=api, account=account, device_json=device_json)
+        super().__init__(api=api, account=account, device_json=device_json, state_update=state_update)
 
     @property
     def state(self) -> Optional[str]:

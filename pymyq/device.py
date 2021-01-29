@@ -14,13 +14,14 @@ _LOGGER = logging.getLogger(__name__)
 class MyQDevice:
     """Define a generic device."""
 
-    def __init__(self, api: "API", device_json: dict, account: str) -> None:
+    def __init__(self, api: "API", device_json: dict, account: str, state_update: datetime) -> None:
         """Initialize.
         :type account: str
         """
         self._api = api
         self._account = account
         self.device_json = device_json
+        self.state_update = state_update
 
     @property
     def account(self) -> str:
