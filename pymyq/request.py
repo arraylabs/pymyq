@@ -37,7 +37,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         resp_exc = None
         last_status = ""
         last_error = ""
-        while attempt < DEFAULT_REQUEST_RETRIES - 1:
+        while attempt < DEFAULT_REQUEST_RETRIES:
             if attempt != 0:
                 wait_for = min(2 ** attempt, 5)
                 _LOGGER.warning(f'Request failed with "{last_status} {last_error}"; trying again in {wait_for} seconds')

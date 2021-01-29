@@ -68,10 +68,13 @@ class API:  # pylint: disable=too-many-instance-attributes
     """Define a class for interacting with the MyQ iOS App API."""
 
     def __init__(
-        self, username: str, password: str, websession: ClientSession = None
+        self, username: str, password: str, websession: ClientSession = None, loop = None
     ) -> None:
         """Initialize."""
         self.__credentials = {"username": username, "password": password}
+        self._myqrequests = MyQRequest(websession or ClientSession())
+        self._loop = loop
+        self._authentication_task = None
         self._codeverifier = None
         self._last_state_update = None  # type: Optional[datetime]
         self._lock = asyncio.Lock()
@@ -81,7 +84,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             None,
             None,
         )  # type: Tuple[Optional[str], Optional[datetime], Optional[datetime]]
-        self._myqrequests = MyQRequest(websession or ClientSession())
+
         self.accounts = {}
         self.devices = {}  # type: Dict[str, MyQDevice]
 
@@ -178,41 +181,59 @@ class API:  # pylint: disable=too-many-instance-attributes
                 _LOGGER.error(message)
                 raise RequestError(message)
 
-        # Check if an authentication is in progress right now.
-        if self._authenticate.locked():
-            # Wait for the lock to be released before moving on.
-            await self._authenticate.acquire()
-            # And release it back, we just wanted to wait for it to complete.
-            self._authenticate.release()
-
-        # Check if token has to be refreshed.
-        if (
-            self._security_token[1] is None
-            or self._security_token[1] <= datetime.utcnow()
-        ):
-            _LOGGER.debug(
-                f"Refreshing token, last refresh was {self._security_token[2]}"
-            )
-            try:
-                await self.authenticate()
-            except RequestError as auth_err:
-                message = (
-                    f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
-                )
-                _LOGGER.error(message)
-                raise AuthenticationError(message)
-
-        if not headers:
-            headers = {}
-
-        # The MyQ API can time out if multiple concurrent requests are made, so
-        # ensure that only one gets through at a time.
-        # Exception is when this is a login request AND there is already a lock, in that case
-        # we're sending the request anyways as we know there is no active request now.
-
-        headers["Authorization"] = self._security_token[0]
-
         async with self._lock:
+
+            # If we had something for an authentication task and it is done then get the result and clear it out.
+            if self._authentication_task is not None and self._authentication_task.done():
+                try:
+                    await self._authentication_task.result()
+                except (RequestError, AuthenticationError) as auth_err:
+                    message = (
+                        f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                    )
+                    _LOGGER.error(message)
+                self._authentication_task = None
+
+            # Check if token has to be refreshed.
+            if (
+                self._security_token[1] is None
+                or self._security_token[1] <= datetime.utcnow()
+            ):
+                if self._security_token[0] is None:
+                    # We need a token, is an authentication task already running?
+                    if self._authentication_task is None:
+                        # It is not, start running one now.
+                        _LOGGER.debug(f"Refreshing token now, last refresh was {self._security_token[2]}")
+                        self._authentication_task = asyncio.create_task(self.authenticate(), name="MyQ_Authenticate")
+
+                    # Wait for authentication task to be completed.
+                    _LOGGER.debug(f"Waiting for updated token, last refresh was {self._security_token[2]}")
+                    try:
+                        await self._authentication_task
+                    except (RequestError, AuthenticationError) as auth_err:
+                            message = (
+                                f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                            )
+                            _LOGGER.error(message)
+                            # If we do not have a token then raise error. But if we have a token then we'll continue the request
+                            # in hopes that our existing token will still work.
+                            if self._security_token[0] is None:
+                                raise AuthenticationError(message)
+                else:
+                    if self._authentication_task is not None:
+                        _LOGGER.debug(f"Scheduling token refresh, last refresh was {self._security_token[2]}")
+                        self._authentication_task = asyncio.create_task(self.authenticate(), name="MyQ_Authenticate")
+
+            if not headers:
+                headers = {}
+
+            # The MyQ API can time out if multiple concurrent requests are made, so
+            # ensure that only one gets through at a time.
+            # Exception is when this is a login request AND there is already a lock, in that case
+            # we're sending the request anyways as we know there is no active request now.
+
+            headers["Authorization"] = self._security_token[0]
+
             try:
                 return await call_method(
                     method=method,
@@ -228,6 +249,13 @@ class API:  # pylint: disable=too-many-instance-attributes
                     f"Error requesting data from {url}: {err.status} - {err.message}"
                 )
                 _LOGGER.error(message)
+
+                if err.status == 401:
+                    # Received unauthorized, reset token and start task to get a new one.
+                    self._security_token = (None, None, self._security_token[2])
+                    _LOGGER.debug(f"Scheduling token refresh, last refresh was {self._security_token[2]}")
+                    self._authentication_task = asyncio.create_task(self.authenticate(), name="MyQ_Authenticate")
+
                 raise RequestError(message)
 
             except ClientError as err:
@@ -245,7 +273,6 @@ class API:  # pylint: disable=too-many-instance-attributes
             url=OAUTH_AUTHORIZE_URI,
             headers={
                 "redirect": "follow",
-                "User-Agent": "null",
             },
             params={
                 "client_id": OAUTH_CLIENT_ID,
@@ -339,7 +366,11 @@ class API:  # pylint: disable=too-many-instance-attributes
             expires = int(data.get('expires_in', DEFAULT_TOKEN_REFRESH))
         except ValueError:
             _LOGGER.debug(f"Expires {data.get('expires_in')} received is not an integer, using default.")
-            expires = DEFAULT_TOKEN_REFRESH
+            expires = DEFAULT_TOKEN_REFRESH*2
+
+        if expires < DEFAULT_TOKEN_REFRESH*2:
+            _LOGGER.debug(f"Expires {expires} is less then default {DEFAULT_TOKEN_REFRESH}, setting to default instead.")
+            expires = DEFAULT_TOKEN_REFRESH*2
 
         return token, expires
 
@@ -355,10 +386,10 @@ class API:  # pylint: disable=too-many-instance-attributes
             # Retrieve and store the initial security token:
             _LOGGER.debug("Initiating OAuth authentication")
             token, expires = await self._oauth_authenticate()
+
             if token is None:
                 _LOGGER.debug("No security token received.")
-                self._security_token = (None, None, self._security_token[2])
-                raise RequestError(
+                raise AuthenticationError(
                     "Authentication response did not contain a security token yet one is expected."
                 )
 
@@ -455,7 +486,7 @@ async def login(username: str, password: str, websession: ClientSession = None) 
     """Log in to the API."""
 
     # Set the user agent in the headers.
-    api = API(username, password, websession)
+    api = API(username=username, password=password, websession=websession)
     _LOGGER.debug("Performing initial authentication into MyQ")
     await api.authenticate()
 
