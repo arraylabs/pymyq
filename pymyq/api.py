@@ -73,7 +73,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         """Initialize."""
         self.__credentials = {"username": username, "password": password}
         self._myqrequests = MyQRequest(websession or ClientSession())
-        self._authentication_task = None
+        self._authentication_task = None  # type:Optional[asyncio.Task]
         self._codeverifier = None
         self._lock = asyncio.Lock()
         self._authenticate = asyncio.Lock()
@@ -194,7 +194,10 @@ class API:  # pylint: disable=too-many-instance-attributes
                 and self._authentication_task.done()
             ):
                 try:
-                    await self._authentication_task.result()
+                    # Get the result so any exception is raised.
+                    self._authentication_task.result()
+                except asyncio.CancelledError:
+                    pass
                 except (RequestError, AuthenticationError) as auth_err:
                     message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
                     _LOGGER.error(message)
@@ -248,15 +251,53 @@ class API:  # pylint: disable=too-many-instance-attributes
 
             # Do the request
             try:
-                return await call_method(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    params=params,
-                    data=data,
-                    json=json,
-                    allow_redirects=allow_redirects,
-                )
+                # First try
+                try:
+                    return await call_method(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        params=params,
+                        data=data,
+                        json=json,
+                        allow_redirects=allow_redirects,
+                    )
+                except ClientResponseError as err:
+                    # Handle only if status is 401, we then re-authenticate and retry the request
+                    if err.status == 401:
+                        self._security_token = (None, None, self._security_token[2])
+                        _LOGGER.debug(
+                            f"Initiating token refresh, last refresh was {self._security_token[2]}"
+                        )
+                        # Start it as a task and store task object.
+                        self._authentication_task = asyncio.create_task(
+                            self.authenticate(), name="MyQ_Authenticate"
+                        )
+                        # Now wait for authentication to be completed. If this fails then we just let it
+                        # continue with the exception
+                        try:
+                            await self._authentication_task
+                        except (RequestError, AuthenticationError) as auth_err:
+                            # Raise authentication error, we need a new token to continue and not getting it right
+                            # now.
+                            message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                            _LOGGER.error(message)
+                            raise AuthenticationError(message)
+
+                        # Re-authentication worked, resend request that had failed.
+                        return await call_method(
+                            method=method,
+                            url=url,
+                            headers=headers,
+                            params=params,
+                            data=data,
+                            json=json,
+                            allow_redirects=allow_redirects,
+                        )
+                    else:
+                        # Some other error, re-raise.
+                        raise err
+
             except ClientResponseError as err:
                 message = (
                     f"Error requesting data from {url}: {err.status} - {err.message}"
@@ -272,6 +313,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                     self._authentication_task = asyncio.create_task(
                         self.authenticate(), name="MyQ_Authenticate"
                     )
+                    raise AuthenticationError(message)
 
                 raise RequestError(message)
 
