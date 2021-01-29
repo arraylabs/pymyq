@@ -32,7 +32,7 @@ from .request import MyQRequest, REQUEST_METHODS
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=20)
-DEFAULT_TOKEN_REFRESH = timedelta(minutes=2)
+DEFAULT_TOKEN_REFRESH = timedelta(minutes=30)
 
 
 class HTMLElementFinder(HTMLParser):
@@ -187,7 +187,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         # Check if token has to be refreshed.
         if (
             self._security_token[1] is None
-            or self._security_token[1] + DEFAULT_TOKEN_REFRESH <= datetime.utcnow()
+            or self._security_token[1] <= datetime.utcnow()
         ):
             _LOGGER.debug(
                 f"Refreshing token, last refresh was {self._security_token[1]}"
@@ -331,8 +331,13 @@ class API:  # pylint: disable=too-many-instance-attributes
         )
 
         token = f"{data.get('token_type')} {data.get('access_token')}"
+        try:
+            expires = int(data.get('expires_in', DEFAULT_TOKEN_REFRESH))
+        except ValueError:
+            _LOGGER.debug(f"Expires {data.get('expires_in')} received is not an integer, using default.")
+            expires=DEFAULT_TOKEN_REFRESH
 
-        return token
+        return token, expires
 
     async def authenticate(self) -> None:
         """Authenticate and get a security token."""
@@ -345,17 +350,16 @@ class API:  # pylint: disable=too-many-instance-attributes
         async with self._authenticate:
             # Retrieve and store the initial security token:
             _LOGGER.debug("Initiating OAuth authentication")
-            self._security_token = (
-                await self._oauth_authenticate(),
-                self._security_token[1],
-            )
-
-            if self._security_token[0] is None:
+            token, expires = await self._oauth_authenticate()
+            if token is None:
                 _LOGGER.debug("No security token received.")
+                self._security_token = (None, None)
                 raise RequestError(
                     "Authentication response did not contain a security token yet one is expected."
                 )
-            self._security_token = (self._security_token[0], datetime.utcnow())
+
+            _LOGGER.debug(f"Received token that will expire in {expires} seconds")
+            self._security_token = (self._security_token[0], datetime.utcnow()+timedelta(seconds=int(expires/2)))
 
     async def update_device_info(self) -> Optional[dict]:
         """Get up-to-date device info."""
