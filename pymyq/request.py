@@ -35,14 +35,15 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
 
         attempt = 0
         resp_exc = None
+        last_status = ""
+        last_error = ""
         while attempt < DEFAULT_REQUEST_RETRIES - 1:
             if attempt != 0:
                 wait_for = min(2 ** attempt, 5)
-                _LOGGER.warning(f"Request failed; trying again in {wait_for} seconds")
+                _LOGGER.warning(f'Request failed with "{last_status} {last_error}"; trying again in {wait_for} seconds')
                 await asyncio.sleep(wait_for)
 
             attempt += 1
-
             try:
                 _LOGGER.debug(f"Sending myq api request {url} and headers {headers}")
                 resp = await self._websession.request(
@@ -67,10 +68,15 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                 )
                 if err.status == 401:
                     raise err
+                last_status = err.status
+                last_error = err.message
+                resp_exc = err
             except ClientError as err:
                 _LOGGER.debug(
                     f"Attempt {attempt} request failed with exception:: {str(err)}"
                 )
+                last_status = ""
+                last_error = str(err)
                 resp_exc = err
 
         raise resp_exc
