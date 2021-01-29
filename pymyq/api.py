@@ -234,7 +234,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 _LOGGER.error(message)
                 raise RequestError(message)
 
-    async def _oauth_authenticate(self) -> str:
+    async def _oauth_authenticate(self) -> (str, int):
 
         # retrieve authentication page
         _LOGGER.debug("Retrieving authentication page")
@@ -335,7 +335,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             expires = int(data.get('expires_in', DEFAULT_TOKEN_REFRESH))
         except ValueError:
             _LOGGER.debug(f"Expires {data.get('expires_in')} received is not an integer, using default.")
-            expires=DEFAULT_TOKEN_REFRESH
+            expires = DEFAULT_TOKEN_REFRESH
 
         return token, expires
 
