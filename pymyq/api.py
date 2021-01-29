@@ -249,6 +249,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
             headers["Authorization"] = self._security_token[0]
 
+            _LOGGER.debug(f"Sending {method} request to {url}.")
             # Do the request
             try:
                 # First try
@@ -266,13 +267,18 @@ class API:  # pylint: disable=too-many-instance-attributes
                     # Handle only if status is 401, we then re-authenticate and retry the request
                     if err.status == 401:
                         self._security_token = (None, None, self._security_token[2])
-                        _LOGGER.debug(
-                            f"Initiating token refresh, last refresh was {self._security_token[2]}"
-                        )
-                        # Start it as a task and store task object.
-                        self._authentication_task = asyncio.create_task(
-                            self.authenticate(), name="MyQ_Authenticate"
-                        )
+
+                        if self._authentication_task is None:
+                            # Start it as a task and store task object.
+                            _LOGGER.debug(
+                                f"Initiating token refresh, last refresh was {self._security_token[2]}"
+                            )
+                            self._authentication_task = asyncio.create_task(
+                                self.authenticate(), name="MyQ_Authenticate"
+                            )
+                        else:
+                            _LOGGER.debug("Authentication task was already scheduled, wait for it.")
+
                         # Now wait for authentication to be completed. If this fails then we just let it
                         # continue with the exception
                         try:
@@ -282,8 +288,10 @@ class API:  # pylint: disable=too-many-instance-attributes
                             # now.
                             message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
                             _LOGGER.error(message)
+                            self._authentication_task = None
                             raise AuthenticationError(message)
 
+                        self._authentication_task = None
                         # Re-authentication worked, resend request that had failed.
                         return await call_method(
                             method=method,
