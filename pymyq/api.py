@@ -79,7 +79,8 @@ class API:  # pylint: disable=too-many-instance-attributes
         self._security_token = (
             None,
             None,
-        )  # type: Tuple[Optional[str], Optional[datetime]]
+            None,
+        )  # type: Tuple[Optional[str], Optional[datetime], Optional[datetime]]
         self._myqrequests = MyQRequest(websession or ClientSession())
         self.accounts = {}
         self.devices = {}  # type: Dict[str, MyQDevice]
@@ -190,7 +191,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             or self._security_token[1] <= datetime.utcnow()
         ):
             _LOGGER.debug(
-                f"Refreshing token, last refresh was {self._security_token[1]}"
+                f"Refreshing token, last refresh was {self._security_token[2]}"
             )
             try:
                 await self.authenticate()
@@ -353,13 +354,13 @@ class API:  # pylint: disable=too-many-instance-attributes
             token, expires = await self._oauth_authenticate()
             if token is None:
                 _LOGGER.debug("No security token received.")
-                self._security_token = (None, None)
+                self._security_token = (None, None, self._security_token[2])
                 raise RequestError(
                     "Authentication response did not contain a security token yet one is expected."
                 )
 
             _LOGGER.debug(f"Received token that will expire in {expires} seconds")
-            self._security_token = (token, datetime.utcnow()+timedelta(seconds=int(expires/2)))
+            self._security_token = (token, datetime.utcnow()+timedelta(seconds=int(expires/2)), datetime.utcnow())
 
     async def update_device_info(self) -> Optional[dict]:
         """Get up-to-date device info."""
