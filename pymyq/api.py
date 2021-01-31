@@ -277,7 +277,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 message = (
                     f"Error requesting data from {url}: {err.status} - {err.message}"
                 )
-                _LOGGER.error(message)
+                _LOGGER.debug(message)
                 if getattr(err, 'status') and err.status == 401:
                     # Received unauthorized, reset token and start task to get a new one.
                     self._security_token = (None, None, self._security_token[2])
@@ -290,7 +290,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 message = (
                     f"Error requesting data from {url}: {str(err)}"
                 )
-                _LOGGER.error(message)
+                _LOGGER.debug(message)
                 raise RequestError(message)
 
     async def _oauth_authenticate(self) -> (str, int):
@@ -572,7 +572,11 @@ async def login(username: str, password: str, websession: ClientSession = None) 
     # Set the user agent in the headers.
     api = API(username=username, password=password, websession=websession)
     _LOGGER.debug("Performing initial authentication into MyQ")
-    await api.authenticate(wait=True)
+    try:
+        await api.authenticate(wait=True)
+    except AuthenticationError as err:
+        _LOGGER.error(f"Authentication failed: {str(err)}")
+        raise err
 
     # Retrieve and store initial set of devices:
     _LOGGER.debug("Retrieving MyQ information")
