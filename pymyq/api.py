@@ -173,12 +173,12 @@ class API:  # pylint: disable=too-many-instance-attributes
                 message = (
                     f"Error requesting data from {url}: {err.status} - {err.message}"
                 )
-                _LOGGER.error(message)
+                _LOGGER.debug(message)
                 raise RequestError(message)
 
             except ClientError as err:
                 message = f"Error requesting data from {url}: {str(err)}"
-                _LOGGER.error(message)
+                _LOGGER.debug(message)
                 raise RequestError(message)
 
         # The MyQ API can time out if multiple concurrent requests are made, so
@@ -219,7 +219,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                         await self.authenticate(wait=True)
                     except AuthenticationError as auth_err:
                         message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
-                        _LOGGER.error(message)
+                        _LOGGER.debug(message)
                         raise AuthenticationError(message)
                 else:
                     # We still have a token, we can continue this request with that token and schedule
@@ -256,7 +256,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                             # Raise authentication error, we need a new token to continue and not getting it right
                             # now.
                             message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
-                            _LOGGER.error(message)
+                            _LOGGER.debug(message)
                             raise AuthenticationError(message)
                     else:
                         # Some other error, re-raise.
@@ -351,7 +351,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             message = (
                 "Invalid MyQ credentials provided. Please recheck login and password."
             )
-            _LOGGER.error(message)
+            _LOGGER.debug(message)
             raise InvalidCredentialsError(message)
 
         # Intercept redirect back to MyQ iOS app
