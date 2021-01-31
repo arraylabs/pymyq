@@ -75,6 +75,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         self._myqrequests = MyQRequest(websession or ClientSession())
         self._authentication_task = None  # type:Optional[asyncio.Task]
         self._codeverifier = None
+        self._invalid_credentials = False
         self._lock = asyncio.Lock()
         self._update = asyncio.Lock()
         self._security_token = (
@@ -126,6 +127,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     @username.setter
     def username(self, username: str):
+        self._invalid_credentials = False
         self.__credentials["username"] = username
 
     @property
@@ -134,6 +136,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     @password.setter
     def password(self, password: str):
+        self._invalid_credentials = False
         self.__credentials["password"] = password
 
     async def request(
@@ -351,6 +354,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             message = (
                 "Invalid MyQ credentials provided. Please recheck login and password."
             )
+            self._invalid_credentials = True
             _LOGGER.debug(message)
             raise InvalidCredentialsError(message)
 
@@ -416,7 +420,12 @@ class API:  # pylint: disable=too-many-instance-attributes
         if self.username is None or self.__credentials["password"] is None:
             message = "No username/password, most likely due to previous failed authentication."
             _LOGGER.debug(message)
-            raise AuthenticationError(message)
+            raise InvalidCredentialsError(message)
+
+        if self._invalid_credentials:
+            message = "Credentials are invalid, update username/password to re-try authentication."
+            _LOGGER.debug(message)
+            raise InvalidCredentialsError(message)
 
         if self._authentication_task is None:
             # No authentication task is currently running, start one
@@ -441,7 +450,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     async def _authenticate(self) -> None:
         # Retrieve and store the initial security token:
-        _LOGGER.debug("Initiating OAuth authentication")
+        _LOGGER.debug(f"{self.__name__} Initiating OAuth authentication")
         token, expires = await self._oauth_authenticate()
 
         if token is None:
@@ -574,6 +583,9 @@ async def login(username: str, password: str, websession: ClientSession = None) 
     _LOGGER.debug("Performing initial authentication into MyQ")
     try:
         await api.authenticate(wait=True)
+    except InvalidCredentialsError as err:
+        _LOGGER.error(f"Username and/or password are invalid. Update username/password.")
+        raise err
     except AuthenticationError as err:
         _LOGGER.error(f"Authentication failed: {str(err)}")
         raise err
