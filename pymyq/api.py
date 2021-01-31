@@ -171,6 +171,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                     data=data,
                     json=json,
                     allow_redirects=allow_redirects,
+                    use_websession=True,
                 )
             except ClientResponseError as err:
                 message = (

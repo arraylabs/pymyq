@@ -3,7 +3,7 @@ import asyncio
 import logging
 from json import JSONDecodeError
 
-from aiohttp import ClientSession, ClientResponse
+from aiohttp import ClientSession, ClientResponse, request as aiohttp_request
 from aiohttp.client_exceptions import ClientError, ClientResponseError
 
 from .errors import RequestError
@@ -31,6 +31,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         data: dict = None,
         json: dict = None,
         allow_redirects: bool = False,
+        use_websession: bool = True,
     ) -> ClientResponse:
 
         attempt = 0
@@ -46,18 +47,32 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
 
             attempt += 1
             try:
-                _LOGGER.debug(f"Sending myq api request {url} and headers {headers}")
-                resp = await self._websession.request(
-                    method,
-                    url,
-                    headers=headers,
-                    params=params,
-                    data=data,
-                    json=json,
-                    skip_auto_headers={"USER-AGENT"},
-                    allow_redirects=allow_redirects,
-                    raise_for_status=True,
-                )
+                if use_websession:
+                    _LOGGER.debug(f"Sending myq api request {url} and headers {headers} with connection pooling")
+                    resp = await self._websession.request(
+                        method,
+                        url,
+                        headers=headers,
+                        params=params,
+                        data=data,
+                        json=json,
+                        skip_auto_headers={"USER-AGENT"},
+                        allow_redirects=allow_redirects,
+                        raise_for_status=True,
+                    )
+                else:
+                    _LOGGER.debug(f"Sending myq api request {url} and headers {headers}")
+                    resp = await aiohttp_request(
+                        method,
+                        url,
+                        headers=headers,
+                        params=params,
+                        data=data,
+                        json=json,
+                        allow_redirects=allow_redirects,
+                        raise_for_status=True,
+                    )
+
                 _LOGGER.debug("Response:")
                 _LOGGER.debug(f"    Response Code: {resp.status}")
                 _LOGGER.debug(f"    Headers: {resp.raw_headers}")
@@ -91,6 +106,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         data: dict = None,
         json: dict = None,
         allow_redirects: bool = False,
+        use_websession: bool = True,
     ) -> (ClientResponse, dict):
 
         resp = await self._send_request(
@@ -101,6 +117,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
             data=data,
             json=json,
             allow_redirects=allow_redirects,
+            use_websession=use_websession,
         )
 
         try:
@@ -124,6 +141,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         data: dict = None,
         json: dict = None,
         allow_redirects: bool = False,
+        use_websession: bool = True,
     ) -> (ClientResponse, str):
 
         resp = await self._send_request(
@@ -134,6 +152,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
             data=data,
             json=json,
             allow_redirects=allow_redirects,
+            use_websession=use_websession,
         )
 
         try:
@@ -157,6 +176,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         data: dict = None,
         json: dict = None,
         allow_redirects: bool = False,
+        use_websession: bool = True,
     ) -> (ClientResponse, None):
 
         return (
@@ -168,6 +188,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                 data=data,
                 json=json,
                 allow_redirects=allow_redirects,
+                use_websession=use_websession,
             ),
             None,
         )
