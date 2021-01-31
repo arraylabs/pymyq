@@ -3,7 +3,7 @@ import asyncio
 import logging
 from json import JSONDecodeError
 
-from aiohttp import ClientSession, ClientResponse, request as aiohttp_request
+from aiohttp import ClientSession, ClientResponse
 from aiohttp.client_exceptions import ClientError, ClientResponseError
 
 from .errors import RequestError
@@ -22,16 +22,16 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
     def __init__(self, websession: ClientSession = None) -> None:
         self._websession = websession or ClientSession()
 
+    @staticmethod
     async def _send_request(
-        self,
         method: str,
         url: str,
+        websession: ClientSession,
         headers: dict = None,
         params: dict = None,
         data: dict = None,
         json: dict = None,
         allow_redirects: bool = False,
-        use_websession: bool = True,
     ) -> ClientResponse:
 
         attempt = 0
@@ -47,31 +47,18 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
 
             attempt += 1
             try:
-                if use_websession:
-                    _LOGGER.debug(f"Sending myq api request {url} and headers {headers} with connection pooling")
-                    resp = await self._websession.request(
-                        method,
-                        url,
-                        headers=headers,
-                        params=params,
-                        data=data,
-                        json=json,
-                        skip_auto_headers={"USER-AGENT"},
-                        allow_redirects=allow_redirects,
-                        raise_for_status=True,
-                    )
-                else:
-                    _LOGGER.debug(f"Sending myq api request {url} and headers {headers}")
-                    resp = await aiohttp_request(
-                        method,
-                        url,
-                        headers=headers,
-                        params=params,
-                        data=data,
-                        json=json,
-                        allow_redirects=allow_redirects,
-                        raise_for_status=True,
-                    )
+                _LOGGER.debug(f"Sending myq api request {url} and headers {headers} with connection pooling")
+                resp = await websession.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    data=data,
+                    json=json,
+                    skip_auto_headers={"USER-AGENT"},
+                    allow_redirects=allow_redirects,
+                    raise_for_status=True,
+                )
 
                 _LOGGER.debug("Response:")
                 _LOGGER.debug(f"    Response Code: {resp.status}")
@@ -101,13 +88,15 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         self,
         method: str,
         url: str,
+        websession: ClientSession = None,
         headers: dict = None,
         params: dict = None,
         data: dict = None,
         json: dict = None,
         allow_redirects: bool = False,
-        use_websession: bool = True,
     ) -> (ClientResponse, dict):
+
+        websession = websession or self._websession
 
         resp = await self._send_request(
             method=method,
@@ -117,7 +106,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
             data=data,
             json=json,
             allow_redirects=allow_redirects,
-            use_websession=use_websession,
+            websession=websession,
         )
 
         try:
@@ -136,13 +125,15 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         self,
         method: str,
         url: str,
+        websession: ClientSession = None,
         headers: dict = None,
         params: dict = None,
         data: dict = None,
         json: dict = None,
         allow_redirects: bool = False,
-        use_websession: bool = True,
     ) -> (ClientResponse, str):
+
+        websession = websession or self._websession
 
         resp = await self._send_request(
             method=method,
@@ -152,32 +143,24 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
             data=data,
             json=json,
             allow_redirects=allow_redirects,
-            use_websession=use_websession,
+            websession=websession,
         )
 
-        try:
-            data = await resp.text()
-        except JSONDecodeError as err:
-            message = (
-                f"JSON Decoder error {err.msg} in response at line {err.lineno} column {err.colno}. Response "
-                f"received was:\n{err.doc}"
-            )
-            _LOGGER.error(message)
-            raise RequestError(message)
-
-        return resp, data
+        return resp, await resp.text()
 
     async def request_response(
         self,
         method: str,
         url: str,
+        websession: ClientSession = None,
         headers: dict = None,
         params: dict = None,
         data: dict = None,
         json: dict = None,
         allow_redirects: bool = False,
-        use_websession: bool = True,
     ) -> (ClientResponse, None):
+
+        websession = websession or self._websession
 
         return (
             await self._send_request(
@@ -188,7 +171,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                 data=data,
                 json=json,
                 allow_redirects=allow_redirects,
-                use_websession=use_websession,
+                websession=websession,
             ),
             None,
         )

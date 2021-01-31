@@ -144,6 +144,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         method: str,
         returns: str,
         url: str,
+        websession: ClientSession = None,
         headers: dict = None,
         params: dict = None,
         data: dict = None,
@@ -166,12 +167,12 @@ class API:  # pylint: disable=too-many-instance-attributes
                 return await call_method(
                     method=method,
                     url=url,
+                    websession=websession,
                     headers=headers,
                     params=params,
                     data=data,
                     json=json,
                     allow_redirects=allow_redirects,
-                    use_websession=False,
                 )
             except ClientResponseError as err:
                 message = (
@@ -243,6 +244,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                     return await call_method(
                         method=method,
                         url=url,
+                        websession=websession,
                         headers=headers,
                         params=params,
                         data=data,
@@ -270,6 +272,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 return await call_method(
                     method=method,
                     url=url,
+                    websession=websession,
                     headers=headers,
                     params=params,
                     data=data,
@@ -299,114 +302,119 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     async def _oauth_authenticate(self) -> (str, int):
 
-        # retrieve authentication page
-        _LOGGER.debug("Retrieving authentication page")
-        resp, text = await self.request(
-            method="get",
-            returns="text",
-            url=OAUTH_AUTHORIZE_URI,
-            headers={
-                "redirect": "follow",
-            },
-            params={
-                "client_id": OAUTH_CLIENT_ID,
-                "code_challenge": get_code_challenge(self._code_verifier),
-                "code_challenge_method": "S256",
-                "redirect_uri": OAUTH_REDIRECT_URI,
-                "response_type": "code",
-                "scope": "MyQ_Residential offline_access",
-            },
-            login_request=True,
-        )
-
-        # Perform login to MyQ
-        _LOGGER.debug("Performing login to MyQ")
-        parser = HTMLElementFinder(
-            tag="input",
-            return_attr="value",
-            with_attr=("name", "__RequestVerificationToken"),
-        )
-
-        # Verification token is within the returned page as <input name="__RequestVerificationToken" value=<token>>
-        # Retrieve token from the page.
-        parser.feed(text)
-        request_verification_token = parser.result[0]
-
-        resp, _ = await self.request(
-            method="post",
-            returns="response",
-            url=resp.url,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Cookie": resp.cookies.output(attrs=[]),
-                "User-Agent": "null",
-            },
-            data={
-                "Email": self.username,
-                "Password": self.__credentials.get("password"),
-                "__RequestVerificationToken": request_verification_token,
-            },
-            allow_redirects=False,
-            login_request=True,
-        )
-
-        # We're supposed to receive back at least 2 cookies. If not then authentication failed.
-        if len(resp.cookies) < 2:
-            message = (
-                "Invalid MyQ credentials provided. Please recheck login and password."
+        async with ClientSession() as session:
+            # retrieve authentication page
+            _LOGGER.debug("Retrieving authentication page")
+            resp, text = await self.request(
+                method="get",
+                returns="text",
+                url=OAUTH_AUTHORIZE_URI,
+                websession=session,
+                headers={
+                    "redirect": "follow",
+                },
+                params={
+                    "client_id": OAUTH_CLIENT_ID,
+                    "code_challenge": get_code_challenge(self._code_verifier),
+                    "code_challenge_method": "S256",
+                    "redirect_uri": OAUTH_REDIRECT_URI,
+                    "response_type": "code",
+                    "scope": "MyQ_Residential offline_access",
+                },
+                login_request=True,
             )
-            self._invalid_credentials = True
-            _LOGGER.debug(message)
-            raise InvalidCredentialsError(message)
 
-        # Intercept redirect back to MyQ iOS app
-        _LOGGER.debug("Calling redirect page")
-        resp, _ = await self.request(
-            method="get",
-            returns="response",
-            url=f"{OAUTH_BASE_URI}{resp.headers['Location']}",
-            headers={
-                "Cookie": resp.cookies.output(attrs=[]),
-                "User-Agent": "null",
-            },
-            allow_redirects=False,
-            login_request=True,
-        )
-
-        # Retrieve token
-        _LOGGER.debug("Getting token")
-        redirect_url = f"{OAUTH_BASE_URI}{resp.headers['Location']}"
-
-        resp, data = await self.request(
-            returns="json",
-            method="post",
-            url=OAUTH_TOKEN_URI,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "User-Agent": "null",
-            },
-            data={
-                "client_id": OAUTH_CLIENT_ID,
-                "client_secret": OAUTH_CLIENT_SECRET,
-                "code": parse_qs(urlsplit(redirect_url).query).get("code", ""),
-                "code_verifier": self._code_verifier,
-                "grant_type": "authorization_code",
-                "redirect_uri": OAUTH_REDIRECT_URI,
-                "scope": parse_qs(urlsplit(redirect_url).query).get(
-                    "code", "MyQ_Residential offline_access"
-                ),
-            },
-            login_request=True,
-        )
-
-        token = f"{data.get('token_type')} {data.get('access_token')}"
-        try:
-            expires = int(data.get("expires_in", DEFAULT_TOKEN_REFRESH))
-        except ValueError:
-            _LOGGER.debug(
-                f"Expires {data.get('expires_in')} received is not an integer, using default."
+            # Perform login to MyQ
+            _LOGGER.debug("Performing login to MyQ")
+            parser = HTMLElementFinder(
+                tag="input",
+                return_attr="value",
+                with_attr=("name", "__RequestVerificationToken"),
             )
-            expires = DEFAULT_TOKEN_REFRESH * 2
+
+            # Verification token is within the returned page as <input name="__RequestVerificationToken" value=<token>>
+            # Retrieve token from the page.
+            parser.feed(text)
+            request_verification_token = parser.result[0]
+
+            resp, _ = await self.request(
+                method="post",
+                returns="response",
+                url=resp.url,
+                websession=session,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Cookie": resp.cookies.output(attrs=[]),
+                    "User-Agent": "null",
+                },
+                data={
+                    "Email": self.username,
+                    "Password": self.__credentials.get("password"),
+                    "__RequestVerificationToken": request_verification_token,
+                },
+                allow_redirects=False,
+                login_request=True,
+            )
+
+            # We're supposed to receive back at least 2 cookies. If not then authentication failed.
+            if len(resp.cookies) < 2:
+                message = (
+                    "Invalid MyQ credentials provided. Please recheck login and password."
+                )
+                self._invalid_credentials = True
+                _LOGGER.debug(message)
+                raise InvalidCredentialsError(message)
+
+            # Intercept redirect back to MyQ iOS app
+            _LOGGER.debug("Calling redirect page")
+            resp, _ = await self.request(
+                method="get",
+                returns="response",
+                url=f"{OAUTH_BASE_URI}{resp.headers['Location']}",
+                websession=session,
+                headers={
+                    "Cookie": resp.cookies.output(attrs=[]),
+                    "User-Agent": "null",
+                },
+                allow_redirects=False,
+                login_request=True,
+            )
+
+            # Retrieve token
+            _LOGGER.debug("Getting token")
+            redirect_url = f"{OAUTH_BASE_URI}{resp.headers['Location']}"
+
+            resp, data = await self.request(
+                returns="json",
+                method="post",
+                url=OAUTH_TOKEN_URI,
+                websession=session,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "User-Agent": "null",
+                },
+                data={
+                    "client_id": OAUTH_CLIENT_ID,
+                    "client_secret": OAUTH_CLIENT_SECRET,
+                    "code": parse_qs(urlsplit(redirect_url).query).get("code", ""),
+                    "code_verifier": self._code_verifier,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": OAUTH_REDIRECT_URI,
+                    "scope": parse_qs(urlsplit(redirect_url).query).get(
+                        "code", "MyQ_Residential offline_access"
+                    ),
+                },
+                login_request=True,
+            )
+
+            token = f"{data.get('token_type')} {data.get('access_token')}"
+            try:
+                expires = int(data.get("expires_in", DEFAULT_TOKEN_REFRESH))
+            except ValueError:
+                _LOGGER.debug(
+                    f"Expires {data.get('expires_in')} received is not an integer, using default."
+                )
+                expires = DEFAULT_TOKEN_REFRESH * 2
 
         if expires < DEFAULT_TOKEN_REFRESH * 2:
             _LOGGER.debug(
