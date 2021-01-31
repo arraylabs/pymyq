@@ -450,7 +450,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     async def _authenticate(self) -> None:
         # Retrieve and store the initial security token:
-        _LOGGER.debug(f"{self.__name__} Initiating OAuth authentication")
+        _LOGGER.debug("Initiating OAuth authentication")
         token, expires = await self._oauth_authenticate()
 
         if token is None:
