@@ -78,7 +78,7 @@ class MyQDevice:
 
     @property
     def state(self) -> Optional[str]:
-        return self._device_state if not None else self.device_state
+        return self._device_state or self.device_state
 
     @state.setter
     def state(self, value: str) -> None:
