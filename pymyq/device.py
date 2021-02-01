@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple, List
 
 from .const import DEVICE_TYPE, WAIT_TIMEOUT
 from .errors import RequestError, MyQError
@@ -118,7 +118,7 @@ class MyQDevice:
         """Get the latest info for this device."""
         await self._api.update_device_info()
 
-    async def wait_for_state(self, current_state: Tuple, new_state: Tuple, last_state_update: datetime) -> bool:
+    async def wait_for_state(self, current_state: List, new_state: List, last_state_update: datetime) -> bool:
         # First wait until door state is actually updated.
         _LOGGER.debug(f"Waiting until device state has been updated for {self.name}")
         wait_timeout = WAIT_TIMEOUT
