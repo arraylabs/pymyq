@@ -213,9 +213,6 @@ class API:  # pylint: disable=too-many-instance-attributes
                 or self._security_token[1] <= datetime.utcnow()
             ):
                 # Token has to be refreshed, get authentication task if running otherwise start a new one.
-                _LOGGER.debug(
-                    f"Refreshing token, last refresh was {self._security_token[2]}"
-                )
                 if self._security_token[0] is None:
                     # Wait for authentication task to be completed.
                     _LOGGER.debug(
