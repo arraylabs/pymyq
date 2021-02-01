@@ -120,6 +120,7 @@ class MyQDevice:
 
     async def wait_for_state(self, current_state: Tuple, new_state: Tuple, last_state_update: datetime) -> bool:
         # First wait until door state is actually updated.
+        _LOGGER.debug(f"Waiting until device state has been updated for {self.name}")
         wait_timeout = WAIT_TIMEOUT
         while (
             last_state_update == self.device_json["state"].get("last_update", datetime.utcnow()) and wait_timeout > 0
@@ -133,6 +134,7 @@ class MyQDevice:
                 pass
 
         # Wait until the state is to what we want it to be
+        _LOGGER.debug(f"Waiting until device state for {self.name} is {current_state}")
         wait_timeout = WAIT_TIMEOUT
         while self.state in current_state and wait_timeout > 0:
             wait_timeout = wait_timeout - 5
