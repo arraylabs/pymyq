@@ -546,8 +546,9 @@ class API:  # pylint: disable=too-many-instance-attributes
                             if myqdevice.device_json["state"].get("last_update") is not None and \
                                     myqdevice.device_json["state"].get("last_update") != last_update:
                                 # MyQ has updated device state, reset ours ensuring we have the one from MyQ.
-                                _LOGGER.debug(f"State for device {myqdevice.name} was updated")
                                 myqdevice.state = None
+                                _LOGGER.debug(f"State for device {myqdevice.name} was updated to {myqdevice.state}")
+
 
                             myqdevice.state_update = state_update_timestmp
                         else:
