@@ -134,7 +134,7 @@ class MyQDevice:
                 pass
 
         # Wait until the state is to what we want it to be
-        _LOGGER.debug(f"Waiting until device state for {self.name} is {current_state}")
+        _LOGGER.debug(f"Waiting until device state for {self.name} is {new_state}")
         wait_timeout = WAIT_TIMEOUT
         while self.state in current_state and wait_timeout > 0:
             wait_timeout = wait_timeout - 5

@@ -74,18 +74,16 @@ class MyQGaragedoor(MyQDevice):
             )
             self.state = STATE_CLOSING
 
-        if not wait_for_state:
-            return True
-
         wait_for_state_task = asyncio.create_task(self.wait_for_state(
-            current_state=[STATE_OPENING],
-            new_state=[STATE_OPEN],
+            current_state=[STATE_CLOSING],
+            new_state=[STATE_CLOSED],
             last_state_update=self.device_json["state"].get("last_update"),
         ), name="MyQ_WaitForClose",
         )
         if not wait_for_state:
             return wait_for_state_task
 
+        _LOGGER.debug("Waiting till garage is closed")
         return await wait_for_state_task
 
     async def open(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
@@ -113,4 +111,5 @@ class MyQGaragedoor(MyQDevice):
         if not wait_for_state:
             return wait_for_state_task
 
+        _LOGGER.debug("Waiting till garage is open")
         return await wait_for_state_task
