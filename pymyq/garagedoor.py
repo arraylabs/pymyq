@@ -80,9 +80,9 @@ class MyQGaragedoor(MyQDevice):
         wait_for_state_task = asyncio.create_task(self.wait_for_state(
             current_state=tuple(STATE_OPENING),
             new_state=tuple(STATE_OPEN),
-            last_state_update=self.device_json["state"]["last_update"]),
-            name="MyQ_Authenticate"
-            )
+            last_state_update=self.device_json["state"].get("last_update"),
+        ), name="MyQ_Authenticate",
+        )
         if not wait_for_state:
             return wait_for_state_task
 
@@ -106,9 +106,10 @@ class MyQGaragedoor(MyQDevice):
         wait_for_state_task = asyncio.create_task(self.wait_for_state(
             current_state=tuple(STATE_OPENING),
             new_state=tuple(STATE_OPEN),
-            last_state_update=self.device_json["state"]["last_update"]),
-            name="MyQ_Authenticate"
-            )
+            last_state_update=self.device_json["state"].get("last_update"),
+        ), name="MyQ_Authenticate",
+        )
+
         if not wait_for_state:
             return wait_for_state_task
 

@@ -122,7 +122,7 @@ class MyQDevice:
         # First wait until door state is actually updated.
         wait_timeout = WAIT_TIMEOUT
         while (
-            last_state_update == self.device_json["state"]["last_update"] and wait_timeout > 0
+            last_state_update == self.device_json["state"].get("last_update", datetime.utcnow()) and wait_timeout > 0
         ):
             wait_timeout = wait_timeout - 5
             await asyncio.sleep(5)
