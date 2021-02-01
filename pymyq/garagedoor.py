@@ -81,7 +81,7 @@ class MyQGaragedoor(MyQDevice):
             current_state=tuple(STATE_OPENING),
             new_state=tuple(STATE_OPEN),
             last_state_update=self.device_json["state"].get("last_update"),
-        ), name="MyQ_Authenticate",
+        ), name="MyQ_WaitForClose",
         )
         if not wait_for_state:
             return wait_for_state_task
@@ -107,7 +107,7 @@ class MyQGaragedoor(MyQDevice):
             current_state=tuple(STATE_OPENING),
             new_state=tuple(STATE_OPEN),
             last_state_update=self.device_json["state"].get("last_update"),
-        ), name="MyQ_Authenticate",
+        ), name="MyQ_WaitForOpen",
         )
 
         if not wait_for_state:
