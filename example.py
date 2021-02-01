@@ -12,7 +12,8 @@ _LOGGER = logging.getLogger()
 
 EMAIL = "<EMAIL>"
 PASSWORD = "<PASSWORD>"
-OPEN_CLOSE = True
+ISSUE_COMMANDS = False
+
 
 def print_info(number: int, device):
     print(f"      Device {number + 1}: {device.name}")
@@ -59,17 +60,20 @@ async def main() -> None:
                         device = api.devices[device_id]
                         print_info(number=idx, device=device)
 
-                        if OPEN_CLOSE:
+                        if ISSUE_COMMANDS:
                             try:
                                 if device.open_allowed:
                                     if device.state == STATE_OPEN:
                                         print(f"Garage door {device.name} is already open")
                                     else:
                                         print(f"Opening garage door {device.name}")
-                                        if await device.open(wait_for_state=True):
-                                            print(f"Garage door {device.name} has been opened.")
-                                        else:
-                                            print(f"Failed to open garage door {device.name}.")
+                                        try:
+                                            if await device.open(wait_for_state=True):
+                                                print(f"Garage door {device.name} has been opened.")
+                                            else:
+                                                print(f"Failed to open garage door {device.name}.")
+                                        except MyQError as err:
+                                            _LOGGER.error(f"Error when trying to open {device.name}: {str(err)}")
                                 else:
                                     print(f"Opening of garage door {device.name} is not allowed.")
 
@@ -81,7 +85,14 @@ async def main() -> None:
                                         print(f"Garage door {device.name} is already closed")
                                     else:
                                         print(f"Closing garage door {device.name}")
-                                        if await device.close(wait_for_state=True):
+                                        try:
+                                            wait_task = await device.close(wait_for_state=False)
+                                        except MyQError as err:
+                                            _LOGGER.error(f"Error when trying to close {device.name}: {str(err)}")
+
+                                        print(f"Device {device.name} is {device.state}")
+
+                                        if await wait_task:
                                             print(f"Garage door {device.name} has been closed.")
                                         else:
                                             print(f"Failed to close garage door {device.name}.")
@@ -100,7 +111,7 @@ async def main() -> None:
                         device = api.devices[device_id]
                         print_info(number=idx, device=device)
 
-                        if OPEN_CLOSE:
+                        if ISSUE_COMMANDS:
                             try:
                                 print(f"Turning lamp {device.name} on")
                                 await device.turnon()
