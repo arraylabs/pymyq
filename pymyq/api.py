@@ -197,9 +197,10 @@ class API:  # pylint: disable=too-many-instance-attributes
                 authentication_task = await self.authenticate(wait=False)
                 if authentication_task.done():
                     _LOGGER.debug("Scheduled token refresh completed, ensuring no exception.")
+                    self._authentication_task = None
                     try:
                         # Get the result so any exception is raised.
-                        self._authentication_task.result()
+                        authentication_task.result()
                     except asyncio.CancelledError:
                         pass
                     except (RequestError, AuthenticationError) as auth_err:
