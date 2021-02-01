@@ -1,10 +1,11 @@
 """Define MyQ devices."""
+import asyncio
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Tuple
 
-from .const import DEVICE_TYPE
-from .errors import RequestError
+from .const import DEVICE_TYPE, WAIT_TIMEOUT
+from .errors import RequestError, MyQError
 
 if TYPE_CHECKING:
     from .api import API
@@ -19,10 +20,11 @@ class MyQDevice:
         """Initialize.
         :type account: str
         """
-        self._api = api
-        self._account = account
-        self.device_json = device_json
-        self.state_update = state_update
+        self._api = api  # type: "API"
+        self._account = account  # type: str
+        self.device_json = device_json  # type: dict
+        self.state_update = state_update  # type: datetime
+        self._device_state = None  # Type: Optional[str]
 
     @property
     def account(self) -> str:
@@ -76,11 +78,16 @@ class MyQDevice:
 
     @property
     def state(self) -> Optional[str]:
-        return None
+        return self._device_state if not None else self.device_state
 
     @state.setter
     def state(self, value: str) -> None:
-        return
+        """Set the current state of the device."""
+        self._device_state = value
+
+    @property
+    def device_state(self) -> Optional[str]:
+        return None
 
     @property
     def close_allowed(self) -> bool:
@@ -110,3 +117,35 @@ class MyQDevice:
     async def update(self) -> None:
         """Get the latest info for this device."""
         await self._api.update_device_info()
+
+    async def wait_for_state(self, current_state: Tuple, new_state: Tuple, last_state_update: datetime) -> bool:
+        # First wait until door state is actually updated.
+        wait_timeout = WAIT_TIMEOUT
+        while (
+            last_state_update == self.device_json["state"]["last_update"] and wait_timeout > 0
+        ):
+            wait_timeout = wait_timeout - 5
+            await asyncio.sleep(5)
+            try:
+                await self.update()
+            except MyQError:
+                # Ignoring
+                pass
+
+        # Wait until the state is to what we want it to be
+        wait_timeout = WAIT_TIMEOUT
+        while self.state in current_state and wait_timeout > 0:
+            wait_timeout = wait_timeout - 5
+            await asyncio.sleep(5)
+            try:
+                await self.update()
+            except MyQError:
+                # Ignoring
+                pass
+
+        # Reset self.state ensuring it reflects actual device state. Only do this if state is still what it would
+        # have been, this to ensure if something else had updated it to something else we don't override.
+        if self._device_state == current_state:
+            self.state = None
+
+        return self.state in new_state

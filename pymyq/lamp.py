@@ -28,20 +28,13 @@ class MyQLamp(MyQDevice):
         super().__init__(api=api, account=account, device_json=device_json, state_update=state_update)
 
     @property
-    def state(self) -> Optional[str]:
+    def device_state(self) -> Optional[str]:
         """Return the current state of the device."""
         return (
             self.device_json["state"].get("lamp_state")
             if self.device_json.get("state") is not None
             else None
         )
-
-    @state.setter
-    def state(self, value: str) -> None:
-        """Set the current state of the device."""
-        if self.device_json.get("state") is None:
-            return
-        self.device_json["state"]["lamp_state"] = value
 
     async def turnoff(self) -> None:
         """Close the device."""

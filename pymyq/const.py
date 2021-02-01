@@ -10,6 +10,7 @@ OAUTH_TOKEN_URI = f"{OAUTH_BASE_URI}/connect/token"
 ACCOUNTS_ENDPOINT = "https://accounts.myq-cloud.com/api/v6.0/accounts"
 DEVICES_ENDPOINT = "https://devices.myq-cloud.com/api/v5.2/Accounts/{account_id}/Devices"
 
+WAIT_TIMEOUT = 60
 
 DEVICE_TYPE = "device_type"
 DEVICE_TYPE_GATE = "gate"

@@ -37,9 +37,9 @@ DEFAULT_TOKEN_REFRESH = 10 * 60  # 10 minutes
 
 class HTMLElementFinder(HTMLParser):
     def __init__(self, tag: str, return_attr: str, with_attr: (str, str) = None):
-        self._FindTag = tag
-        self._WithAttr = with_attr
-        self._ReturnAttr = return_attr
+        self._FindTag = tag  # type: str
+        self._WithAttr = with_attr  # type: Optional[(str, str)]
+        self._ReturnAttr = return_attr  # type: str
         self._Result = []
         HTMLParser.__init__(self)
 
@@ -74,17 +74,17 @@ class API:  # pylint: disable=too-many-instance-attributes
         self.__credentials = {"username": username, "password": password}
         self._myqrequests = MyQRequest(websession or ClientSession())
         self._authentication_task = None  # type:Optional[asyncio.Task]
-        self._codeverifier = None
-        self._invalid_credentials = False
-        self._lock = asyncio.Lock()
-        self._update = asyncio.Lock()
+        self._codeverifier = None  # type: Optional[str]
+        self._invalid_credentials = False  # type: bool
+        self._lock = asyncio.Lock()  # type: asyncio.Lock
+        self._update = asyncio.Lock()  # type: asyncio.Lock
         self._security_token = (
             None,
             None,
             None,
         )  # type: Tuple[Optional[str], Optional[datetime], Optional[datetime]]
 
-        self.accounts = {}
+        self.accounts = {}  # type: Dict[str, str]
         self.devices = {}  # type: Dict[str, MyQDevice]
         self.last_state_update = None  # type: Optional[datetime]
 
@@ -126,7 +126,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         return self.__credentials["username"]
 
     @username.setter
-    def username(self, username: str):
+    def username(self, username: str) -> None:
         self._invalid_credentials = False
         self.__credentials["username"] = username
 
@@ -135,7 +135,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         return None
 
     @password.setter
-    def password(self, password: str):
+    def password(self, password: str) -> None:
         self._invalid_credentials = False
         self.__credentials["password"] = password
 
@@ -473,7 +473,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             datetime.now(),
         )
 
-    async def update_device_info(self) -> Optional[dict]:
+    async def update_device_info(self) -> None:
         """Get up-to-date device info."""
         # The MyQ API can time out if state updates are too frequent; therefore,
         # if back-to-back requests occur within a threshold, respond to only the first
@@ -521,7 +521,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                     url=DEVICES_ENDPOINT.format(account_id=account),
                 )
 
-                state_update = datetime.utcnow()
+                state_update_timestmp = datetime.utcnow()
                 if devices_resp is not None and devices_resp.get("items") is not None:
                     for device in devices_resp.get("items"):
                         serial_number = device.get("serial_number")
@@ -536,8 +536,18 @@ class API:  # pylint: disable=too-many-instance-attributes
                                 f"Updating information for device with serial number {serial_number}"
                             )
                             myqdevice = self.devices[serial_number]
+
+                            # When performing commands we might update the state temporary, need to ensure
+                            # that the state is not set back to something else if MyQ does not yet have updated
+                            # state
+                            last_update = myqdevice.device_json["state"]["last_update"]
                             myqdevice.device_json = device
-                            myqdevice.state_update = state_update
+
+                            if myqdevice.device_json["state"]["last_update"] != last_update:
+                                # MyQ has updated device state, reset ours ensuring we have the one from MyQ.
+                                myqdevice.state = None
+
+                            myqdevice.state_update = state_update_timestmp
                         else:
                             if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
                                 _LOGGER.debug(
@@ -547,7 +557,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                                     api=self,
                                     account=account,
                                     device_json=device,
-                                    state_update=state_update,
+                                    state_update=state_update_timestmp,
                                 )
                             elif device.get("device_family") == DEVICE_FAMLY_LAMP:
                                 _LOGGER.debug(
@@ -557,7 +567,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                                     api=self,
                                     account=account,
                                     device_json=device,
-                                    state_update=state_update,
+                                    state_update=state_update_timestmp,
                                 )
                             elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
                                 _LOGGER.debug(
@@ -567,7 +577,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                                     api=self,
                                     account=account,
                                     device_json=device,
-                                    state_update=state_update,
+                                    state_update=state_update_timestmp,
                                 )
                             else:
                                 _LOGGER.warning(
