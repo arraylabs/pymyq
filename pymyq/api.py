@@ -603,7 +603,6 @@ class API:  # pylint: disable=too-many-instance-attributes
                     accounts = ({for_account: self.accounts.get(for_account)})
 
             for account in accounts:
-                _LOGGER.debug(f"Retrieving devices for account {self.accounts[account]}")
                 await self._get_devices_for_account(account=account)
 
             # Update our last update timestamp UNLESS this is for a specific account
