@@ -128,7 +128,7 @@ class MyQDevice:
             wait_timeout = wait_timeout - 5
             await asyncio.sleep(5)
             try:
-                await self.update()
+                await self._api.update_device_info(for_account=self.account)
             except MyQError:
                 # Ignoring
                 pass
@@ -140,7 +140,7 @@ class MyQDevice:
             wait_timeout = wait_timeout - 5
             await asyncio.sleep(5)
             try:
-                await self.update()
+                await self._api.update_device_info(for_account=self.account)
             except MyQError:
                 # Ignoring
                 pass

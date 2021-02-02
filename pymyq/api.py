@@ -473,7 +473,96 @@ class API:  # pylint: disable=too-many-instance-attributes
             datetime.now(),
         )
 
-    async def update_device_info(self) -> None:
+    async def _get_accounts(self) -> Optional[dict]:
+
+        _LOGGER.debug("Retrieving account information")
+
+        # Retrieve the accounts
+        _, accounts_resp = await self.request(
+            method="get", returns="json", url=ACCOUNTS_ENDPOINT
+        )
+
+        if accounts_resp is not None and accounts_resp.get("accounts") is not None:
+            accounts = {}
+            for account in accounts_resp["accounts"]:
+                account_id = account.get("id")
+                if account_id is not None:
+                    _LOGGER.debug(
+                        f"Got account {account_id} with name {account.get('name')}"
+                    )
+                    accounts.update({account_id: account.get("name")})
+        else:
+            _LOGGER.debug(f"No accounts found")
+            accounts = None
+
+        return accounts
+
+    async def _get_devices_for_account(self, account) -> None:
+
+        _LOGGER.debug(f"Retrieving devices for account {self.accounts[account]}")
+
+        _, devices_resp = await self.request(
+            method="get",
+            returns="json",
+            url=DEVICES_ENDPOINT.format(account_id=account),
+        )
+
+        state_update_timestmp = datetime.utcnow()
+        if devices_resp is not None and devices_resp.get("items") is not None:
+            for device in devices_resp.get("items"):
+                serial_number = device.get("serial_number")
+                if serial_number is None:
+                    _LOGGER.debug(f"No serial number for device with name {device.get('name')}.")
+                    continue
+
+                if serial_number in self.devices:
+                    _LOGGER.debug(f"Updating information for device with serial number {serial_number}")
+                    myqdevice = self.devices[serial_number]
+
+                    # When performing commands we might update the state temporary, need to ensure
+                    # that the state is not set back to something else if MyQ does not yet have updated
+                    # state
+                    last_update = myqdevice.device_json["state"].get("last_update")
+                    myqdevice.device_json = device
+
+                    if myqdevice.device_json["state"].get("last_update") is not None and \
+                            myqdevice.device_json["state"].get("last_update") != last_update:
+                        # MyQ has updated device state, reset ours ensuring we have the one from MyQ.
+                        myqdevice.state = None
+                        _LOGGER.debug(f"State for device {myqdevice.name} was updated to {myqdevice.state}")
+
+                    myqdevice.state_update = state_update_timestmp
+                else:
+                    if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
+                        _LOGGER.debug(f"Adding new garage door with serial number {serial_number}")
+                        self.devices[serial_number] = MyQGaragedoor(
+                            api=self,
+                            account=account,
+                            device_json=device,
+                            state_update=state_update_timestmp,
+                        )
+                    elif device.get("device_family") == DEVICE_FAMLY_LAMP:
+                        _LOGGER.debug(f"Adding new lamp with serial number {serial_number}")
+                        self.devices[serial_number] = MyQLamp(
+                            api=self,
+                            account=account,
+                            device_json=device,
+                            state_update=state_update_timestmp,
+                        )
+                    elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
+                        _LOGGER.debug(f"Adding new gateway with serial number {serial_number}")
+                        self.devices[serial_number] = MyQDevice(
+                            api=self,
+                            account=account,
+                            device_json=device,
+                            state_update=state_update_timestmp,
+                        )
+                    else:
+                        _LOGGER.warning(f"Unknown device family {device.get('device_family')}")
+        else:
+            _LOGGER.debug(f"No devices found for account {self.accounts[account]}")
+
+    async def update_device_info(self, for_account: str = None) -> None:
         """Get up-to-date device info."""
         # The MyQ API can time out if state updates are too frequent; therefore,
         # if back-to-back requests occur within a threshold, respond to only the first
@@ -486,113 +575,40 @@ class API:  # pylint: disable=too-many-instance-attributes
                 self.last_state_update + DEFAULT_STATE_UPDATE_INTERVAL
             )
 
-            if call_dt < next_available_call_dt:
+            # Ensure we're within our minimum update interval AND update request is not for a specific device
+            if call_dt < next_available_call_dt and for_account is None:
                 _LOGGER.debug(
                     "Ignoring device update request as it is within throttle window"
                 )
                 return
 
-            _LOGGER.debug(
-                "Updating device information, starting with retrieving accounts"
-            )
-            _, accounts_resp = await self.request(
-                method="get", returns="json", url=ACCOUNTS_ENDPOINT
-            )
-            self.accounts = {}
-            if accounts_resp is not None and accounts_resp.get("accounts") is not None:
-                for account in accounts_resp["accounts"]:
-                    account_id = account.get("id")
-                    if account_id is not None:
-                        _LOGGER.debug(
-                            f"Got account {account_id} with name {account.get('name')}"
-                        )
-                        self.accounts.update({account_id: account.get("name")})
-            else:
-                _LOGGER.debug(f"No accounts found")
-                self.devices = []
+            _LOGGER.debug("Updating device information")
+            # If update request is for a specific account then do not retrieve account information.
+            if for_account is None:
+                self.accounts = await self._get_accounts()
 
-            for account in self.accounts:
-                _LOGGER.debug(
-                    f"Retrieving devices for account {self.accounts[account]}"
-                )
-                _, devices_resp = await self.request(
-                    method="get",
-                    returns="json",
-                    url=DEVICES_ENDPOINT.format(account_id=account),
-                )
-
-                state_update_timestmp = datetime.utcnow()
-                if devices_resp is not None and devices_resp.get("items") is not None:
-                    for device in devices_resp.get("items"):
-                        serial_number = device.get("serial_number")
-                        if serial_number is None:
-                            _LOGGER.debug(
-                                f"No serial number for device with name {device.get('name')}."
-                            )
-                            continue
-
-                        if serial_number in self.devices:
-                            _LOGGER.debug(
-                                f"Updating information for device with serial number {serial_number}"
-                            )
-                            myqdevice = self.devices[serial_number]
-
-                            # When performing commands we might update the state temporary, need to ensure
-                            # that the state is not set back to something else if MyQ does not yet have updated
-                            # state
-                            last_update = myqdevice.device_json["state"].get("last_update")
-                            myqdevice.device_json = device
-
-                            if myqdevice.device_json["state"].get("last_update") is not None and \
-                                    myqdevice.device_json["state"].get("last_update") != last_update:
-                                # MyQ has updated device state, reset ours ensuring we have the one from MyQ.
-                                myqdevice.state = None
-                                _LOGGER.debug(f"State for device {myqdevice.name} was updated to {myqdevice.state}")
-
-
-                            myqdevice.state_update = state_update_timestmp
-                        else:
-                            if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
-                                _LOGGER.debug(
-                                    f"Adding new garage door with serial number {serial_number}"
-                                )
-                                self.devices[serial_number] = MyQGaragedoor(
-                                    api=self,
-                                    account=account,
-                                    device_json=device,
-                                    state_update=state_update_timestmp,
-                                )
-                            elif device.get("device_family") == DEVICE_FAMLY_LAMP:
-                                _LOGGER.debug(
-                                    f"Adding new lamp with serial number {serial_number}"
-                                )
-                                self.devices[serial_number] = MyQLamp(
-                                    api=self,
-                                    account=account,
-                                    device_json=device,
-                                    state_update=state_update_timestmp,
-                                )
-                            elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
-                                _LOGGER.debug(
-                                    f"Adding new gateway with serial number {serial_number}"
-                                )
-                                self.devices[serial_number] = MyQDevice(
-                                    api=self,
-                                    account=account,
-                                    device_json=device,
-                                    state_update=state_update_timestmp,
-                                )
-                            else:
-                                _LOGGER.warning(
-                                    f"Unknown device family {device.get('device_family')}"
-                                )
-                else:
-                    _LOGGER.debug(
-                        f"No devices found for account {self.accounts[account]}"
-                    )
+                if self.accounts is None:
+                    _LOGGER.debug(f"No accounts found")
                     self.devices = []
+                    accounts = {}
+                else:
+                    accounts = self.accounts
+            else:
+                # Request is for specific account, thus restrict retrieval to the 1 account.
+                if self.accounts.get(for_account) is None:
+                    # Checking to ensure we know the account, but this should never happen.
+                    _LOGGER.debug(f"Unable to perform update request for account {account} as it is not known.")
+                    accounts = {}
+                else:
+                    accounts = ({for_account: self.accounts.get(for_account)})
 
-            self.last_state_update = datetime.utcnow()
+            for account in accounts:
+                _LOGGER.debug(f"Retrieving devices for account {self.accounts[account]}")
+                await self._get_devices_for_account(account=account)
+
+            # Update our last update timestamp UNLESS this is for a specific account
+            if for_account is None:
+                self.last_state_update = datetime.utcnow()
 
 
 async def login(username: str, password: str, websession: ClientSession = None) -> API:
