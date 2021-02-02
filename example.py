@@ -12,8 +12,7 @@ _LOGGER = logging.getLogger()
 
 EMAIL = "<EMAIL>"
 PASSWORD = "<PASSWORD>"
-ISSUE_COMMANDS = False
-
+ISSUE_COMMANDS = True
 
 def print_info(number: int, device):
     print(f"      Device {number + 1}: {device.name}")
@@ -76,9 +75,6 @@ async def main() -> None:
                                             _LOGGER.error(f"Error when trying to open {device.name}: {str(err)}")
                                 else:
                                     print(f"Opening of garage door {device.name} is not allowed.")
-
-                                if device.open_allowed and device.close_allowed:
-                                    await asyncio.sleep(5)
 
                                 if device.close_allowed:
                                     if device.state == STATE_CLOSED:
