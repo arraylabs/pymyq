@@ -597,7 +597,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 # Request is for specific account, thus restrict retrieval to the 1 account.
                 if self.accounts.get(for_account) is None:
                     # Checking to ensure we know the account, but this should never happen.
-                    _LOGGER.debug(f"Unable to perform update request for account {account} as it is not known.")
+                    _LOGGER.debug(f"Unable to perform update request for account {for_account} as it is not known.")
                     accounts = {}
                 else:
                     accounts = ({for_account: self.accounts.get(for_account)})
