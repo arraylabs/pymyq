@@ -1,5 +1,6 @@
 -i https://pypi.python.org/simple
 aiohttp>=3.7
+beautifulsoup4>=4.9.3
 black==20.8b1
 flake8>=3.8.4
 pkce>=1.0.2

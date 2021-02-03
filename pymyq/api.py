@@ -1,8 +1,8 @@
 """Define the MyQ API."""
 import asyncio
 import logging
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from html.parser import HTMLParser
 from typing import Dict, Optional, Union, Tuple
 from urllib.parse import urlsplit, parse_qs
 
@@ -33,35 +33,6 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=10)
 DEFAULT_TOKEN_REFRESH = 10 * 60  # 10 minutes
-
-
-class HTMLElementFinder(HTMLParser):
-    def __init__(self, tag: str, return_attr: str, with_attr: (str, str) = None):
-        self._FindTag = tag  # type: str
-        self._WithAttr = with_attr  # type: Optional[(str, str)]
-        self._ReturnAttr = return_attr  # type: str
-        self._Result = []
-        HTMLParser.__init__(self)
-
-    @property
-    def result(self):
-        return self._Result
-
-    def handle_starttag(self, tag, attrs):
-        if tag == self._FindTag:
-            store_attr = False
-            if self._WithAttr is None:
-                store_attr = True
-            else:
-                for attr, value in attrs:
-                    if (attr, value) == self._WithAttr:
-                        store_attr = True
-                        break
-
-            if store_attr:
-                for attr, value in attrs:
-                    if attr == self._ReturnAttr:
-                        self._Result.append(value)
 
 
 class API:  # pylint: disable=too-many-instance-attributes
@@ -196,7 +167,9 @@ class API:  # pylint: disable=too-many-instance-attributes
             if self._authentication_task is not None:
                 authentication_task = await self.authenticate(wait=False)
                 if authentication_task.done():
-                    _LOGGER.debug("Scheduled token refresh completed, ensuring no exception.")
+                    _LOGGER.debug(
+                        "Scheduled token refresh completed, ensuring no exception."
+                    )
                     self._authentication_task = None
                     try:
                         # Get the result so any exception is raised.
@@ -283,7 +256,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                     f"Error requesting data from {url}: {err.status} - {err.message}"
                 )
                 _LOGGER.debug(message)
-                if getattr(err, 'status') and err.status == 401:
+                if getattr(err, "status") and err.status == 401:
                     # Received unauthorized, reset token and start task to get a new one.
                     self._security_token = (None, None, self._security_token[2])
                     await self.authenticate(wait=False)
@@ -292,9 +265,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 raise RequestError(message)
 
             except ClientError as err:
-                message = (
-                    f"Error requesting data from {url}: {str(err)}"
-                )
+                message = f"Error requesting data from {url}: {str(err)}"
                 _LOGGER.debug(message)
                 raise RequestError(message)
 
@@ -303,7 +274,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         async with ClientSession() as session:
             # retrieve authentication page
             _LOGGER.debug("Retrieving authentication page")
-            resp, text = await self.request(
+            resp, html = await self.request(
                 method="get",
                 returns="text",
                 url=OAUTH_AUTHORIZE_URI,
@@ -322,19 +293,64 @@ class API:  # pylint: disable=too-many-instance-attributes
                 login_request=True,
             )
 
+            # Scanning returned web page for required fields.
+            _LOGGER.debug("Scanning login page for fields to return")
+            soup = BeautifulSoup(html, "html.parser")
+
+            # Go through all potential forms in the page returned. This is in case multiple forms are returned.
+            forms = soup.find_all("form")
+            data = {}
+            for form in forms:
+                have_email = False
+                have_password = False
+                have_submit = False
+                # Go through all the input fields.
+                for field in form.find_all("input"):
+                    if field.get("type"):
+                        # Hidden value, include so we return back
+                        if field.get("type").lower() == "hidden":
+                            data.update(
+                                {
+                                    field.get("name", "NONAME"): field.get(
+                                        "value", "NOVALUE"
+                                    )
+                                }
+                            )
+                        # Email field
+                        elif field.get("type").lower() == "email":
+                            data.update({field.get("name", "Email"): self.username})
+                            have_email = True
+                        # Password field
+                        elif field.get("type").lower() == "password":
+                            data.update(
+                                {
+                                    field.get(
+                                        "name", "Password"
+                                    ): self.__credentials.get("password")
+                                }
+                            )
+                            have_password = True
+                        # To confirm this form also has a submit button
+                        elif field.get("type").lower() == "submit":
+                            have_submit = True
+
+                # Confirm we found email, password, and submit in the form to be submitted
+                if have_email and have_password and have_submit:
+                    break
+
+                # If we're here then this is not the form to submit.
+                data = {}
+
+            # If data is empty then we did not find the valid form and are unable to continue.
+            if len(data) == 0:
+                _LOGGER.debug("Form with required fields not found")
+                raise RequestError(
+                    "Form containing fields for email, password and submit not found."
+                    "Unable to continue login process."
+                )
+
             # Perform login to MyQ
             _LOGGER.debug("Performing login to MyQ")
-            parser = HTMLElementFinder(
-                tag="input",
-                return_attr="value",
-                with_attr=("name", "__RequestVerificationToken"),
-            )
-
-            # Verification token is within the returned page as <input name="__RequestVerificationToken" value=<token>>
-            # Retrieve token from the page.
-            parser.feed(text)
-            request_verification_token = parser.result[0]
-
             resp, _ = await self.request(
                 method="post",
                 returns="response",
@@ -343,22 +359,15 @@ class API:  # pylint: disable=too-many-instance-attributes
                 headers={
                     "Content-Type": "application/x-www-form-urlencoded",
                     "Cookie": resp.cookies.output(attrs=[]),
-                    "User-Agent": "null",
                 },
-                data={
-                    "Email": self.username,
-                    "Password": self.__credentials.get("password"),
-                    "__RequestVerificationToken": request_verification_token,
-                },
+                data=data,
                 allow_redirects=False,
                 login_request=True,
             )
 
             # We're supposed to receive back at least 2 cookies. If not then authentication failed.
             if len(resp.cookies) < 2:
-                message = (
-                    "Invalid MyQ credentials provided. Please recheck login and password."
-                )
+                message = "Invalid MyQ credentials provided. Please recheck login and password."
                 self._invalid_credentials = True
                 _LOGGER.debug(message)
                 raise InvalidCredentialsError(message)
@@ -512,11 +521,15 @@ class API:  # pylint: disable=too-many-instance-attributes
             for device in devices_resp.get("items"):
                 serial_number = device.get("serial_number")
                 if serial_number is None:
-                    _LOGGER.debug(f"No serial number for device with name {device.get('name')}.")
+                    _LOGGER.debug(
+                        f"No serial number for device with name {device.get('name')}."
+                    )
                     continue
 
                 if serial_number in self.devices:
-                    _LOGGER.debug(f"Updating information for device with serial number {serial_number}")
+                    _LOGGER.debug(
+                        f"Updating information for device with serial number {serial_number}"
+                    )
                     myqdevice = self.devices[serial_number]
 
                     # When performing commands we might update the state temporary, need to ensure
@@ -525,16 +538,23 @@ class API:  # pylint: disable=too-many-instance-attributes
                     last_update = myqdevice.device_json["state"].get("last_update")
                     myqdevice.device_json = device
 
-                    if myqdevice.device_json["state"].get("last_update") is not None and \
-                            myqdevice.device_json["state"].get("last_update") != last_update:
+                    if (
+                        myqdevice.device_json["state"].get("last_update") is not None
+                        and myqdevice.device_json["state"].get("last_update")
+                        != last_update
+                    ):
                         # MyQ has updated device state, reset ours ensuring we have the one from MyQ.
                         myqdevice.state = None
-                        _LOGGER.debug(f"State for device {myqdevice.name} was updated to {myqdevice.state}")
+                        _LOGGER.debug(
+                            f"State for device {myqdevice.name} was updated to {myqdevice.state}"
+                        )
 
                     myqdevice.state_update = state_update_timestmp
                 else:
                     if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
-                        _LOGGER.debug(f"Adding new garage door with serial number {serial_number}")
+                        _LOGGER.debug(
+                            f"Adding new garage door with serial number {serial_number}"
+                        )
                         self.devices[serial_number] = MyQGaragedoor(
                             api=self,
                             account=account,
@@ -542,7 +562,9 @@ class API:  # pylint: disable=too-many-instance-attributes
                             state_update=state_update_timestmp,
                         )
                     elif device.get("device_family") == DEVICE_FAMLY_LAMP:
-                        _LOGGER.debug(f"Adding new lamp with serial number {serial_number}")
+                        _LOGGER.debug(
+                            f"Adding new lamp with serial number {serial_number}"
+                        )
                         self.devices[serial_number] = MyQLamp(
                             api=self,
                             account=account,
@@ -550,7 +572,9 @@ class API:  # pylint: disable=too-many-instance-attributes
                             state_update=state_update_timestmp,
                         )
                     elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
-                        _LOGGER.debug(f"Adding new gateway with serial number {serial_number}")
+                        _LOGGER.debug(
+                            f"Adding new gateway with serial number {serial_number}"
+                        )
                         self.devices[serial_number] = MyQDevice(
                             api=self,
                             account=account,
@@ -558,7 +582,9 @@ class API:  # pylint: disable=too-many-instance-attributes
                             state_update=state_update_timestmp,
                         )
                     else:
-                        _LOGGER.warning(f"Unknown device family {device.get('device_family')}")
+                        _LOGGER.warning(
+                            f"Unknown device family {device.get('device_family')}"
+                        )
         else:
             _LOGGER.debug(f"No devices found for account {self.accounts[account]}")
 
@@ -597,10 +623,12 @@ class API:  # pylint: disable=too-many-instance-attributes
                 # Request is for specific account, thus restrict retrieval to the 1 account.
                 if self.accounts.get(for_account) is None:
                     # Checking to ensure we know the account, but this should never happen.
-                    _LOGGER.debug(f"Unable to perform update request for account {for_account} as it is not known.")
+                    _LOGGER.debug(
+                        f"Unable to perform update request for account {for_account} as it is not known."
+                    )
                     accounts = {}
                 else:
-                    accounts = ({for_account: self.accounts.get(for_account)})
+                    accounts = {for_account: self.accounts.get(for_account)}
 
             for account in accounts:
                 await self._get_devices_for_account(account=account)
@@ -619,7 +647,9 @@ async def login(username: str, password: str, websession: ClientSession = None) 
     try:
         await api.authenticate(wait=True)
     except InvalidCredentialsError as err:
-        _LOGGER.error(f"Username and/or password are invalid. Update username/password.")
+        _LOGGER.error(
+            f"Username and/or password are invalid. Update username/password."
+        )
         raise err
     except AuthenticationError as err:
         _LOGGER.error(f"Authentication failed: {str(err)}")
