@@ -1,19 +1,23 @@
 """The myq constants."""
 
-API_BASE = "https://api.myqdevice.com/api/v{0}"
-BASE_API_VERSION = 5
-DEVICES_API_VERSION = 5.1
+OAUTH_CLIENT_ID = "IOS_CGI_MYQ"
+OAUTH_CLIENT_SECRET = "VUQ0RFhuS3lQV3EyNUJTdw=="
+OAUTH_BASE_URI = "https://partner-identity.myq-cloud.com"
+OAUTH_AUTHORIZE_URI = f"{OAUTH_BASE_URI}/connect/authorize"
+OAUTH_REDIRECT_URI = "com.myqops://ios"
+OAUTH_TOKEN_URI = f"{OAUTH_BASE_URI}/connect/token"
 
-LOGIN_ENDPOINT = "Login"
-ACCOUNT_INFORMATION_ENDPOINT = "My"
-ACCOUNTS_ENDPOINT = "Accounts"
-DEVICES_ENDPOINT = f"{ACCOUNTS_ENDPOINT}/{{0}}/Devices"
-ACTION_ENDPOINT = f"{ACCOUNTS_ENDPOINT}/{{0}}/Devices/{{1}}/actions"
+ACCOUNTS_ENDPOINT = "https://accounts.myq-cloud.com/api/v6.0/accounts"
+DEVICES_ENDPOINT = "https://devices.myq-cloud.com/api/v5.2/Accounts/{account_id}/Devices"
+
+WAIT_TIMEOUT = 60
 
 DEVICE_TYPE = "device_type"
 DEVICE_TYPE_GATE = "gate"
 DEVICE_FAMILY = "device_family"
 DEVICE_FAMILY_GATEWAY = "gateway"
+DEVICE_FAMILY_GARAGEDOOR = "garagedoor"
+DEVICE_FAMLY_LAMP = "lamp"
 DEVICE_STATE = "state"
 DEVICE_STATE_ONLINE = "online"
 
