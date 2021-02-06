@@ -615,7 +615,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
                 if self.accounts is None:
                     _LOGGER.debug(f"No accounts found")
-                    self.devices = []
+                    self.devices = {}
                     accounts = {}
                 else:
                     accounts = self.accounts
