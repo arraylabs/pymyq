@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, Tuple, List
+from typing import TYPE_CHECKING, Optional, List
 
 from .const import DEVICE_TYPE, WAIT_TIMEOUT
 from .errors import RequestError, MyQError
