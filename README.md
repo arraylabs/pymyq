@@ -4,6 +4,10 @@ This is a Python 3.8+ module aiming to interact with the Chamberlain MyQ API.
 
 Code is licensed under the MIT license.
 
+# [Homeassistant](https://home-assistant.io)
+[Homeassistant](https://home-assistant.io) has a [core myQ component](https://www.home-assistant.io/integrations/myq/) leveraging this package.
+In addition, there is also a [HACS myQ component](https://github.com/ehendrix23/hass_myq) available that can be added into HACS as a custom repository. 
+
 # Getting Started
 
 ## Installation
