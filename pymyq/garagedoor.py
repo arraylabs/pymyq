@@ -8,12 +8,11 @@ from .device import MyQDevice
 from .errors import RequestError
 
 if TYPE_CHECKING:
-    from .api import API
+    from .account import MyQAccount
 
 _LOGGER = logging.getLogger(__name__)
 
-COMMAND_URI = \
-    "https://account-devices-gdo.myq-cloud.com/api/v5.2/Accounts/{account_id}/door_openers/{device_serial}/{command}"
+COMMAND_URI = "https://account-devices-gdo.myq-cloud.com/api/v5.2/Accounts/{account_id}/door_openers/{device_serial}/{command}"
 COMMAND_CLOSE = "close"
 COMMAND_OPEN = "open"
 STATE_CLOSED = "closed"
@@ -28,11 +27,18 @@ STATE_UNKNOWN = "unknown"
 class MyQGaragedoor(MyQDevice):
     """Define a generic device."""
 
-    def __init__(self, api: "API", device_json: dict, account: str, state_update: datetime) -> None:
+    def __init__(
+        self,
+        device_json: dict,
+        account: "MyQAccount",
+        state_update: datetime,
+    ) -> None:
         """Initialize.
         :type account: str
         """
-        super().__init__(api=api, account=account, device_json=device_json, state_update=state_update)
+        super().__init__(
+            account=account, device_json=device_json, state_update=state_update
+        )
 
     @property
     def close_allowed(self) -> bool:
@@ -56,12 +62,16 @@ class MyQGaragedoor(MyQDevice):
     async def close(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
         """Close the device."""
         if self.state != self.device_state:
-            raise RequestError(f"Device is currently {self.state}, wait until complete.")
+            raise RequestError(
+                f"Device is currently {self.state}, wait until complete."
+            )
 
         if self.state not in (STATE_CLOSED, STATE_CLOSING):
             # If our state is different from device state then it means an action is already being performed.
             if self.state != self.device_state:
-                raise RequestError(f"Device is currently {self.state}, wait until complete.")
+                raise RequestError(
+                    f"Device is currently {self.state}, wait until complete."
+                )
 
             # Device is currently not closed or closing, send command to close
             await self._send_state_command(
@@ -74,12 +84,14 @@ class MyQGaragedoor(MyQDevice):
             )
             self.state = STATE_CLOSING
 
-        wait_for_state_task = asyncio.create_task(self.wait_for_state(
-            current_state=[STATE_CLOSING],
-            new_state=[STATE_CLOSED],
-            last_state_update=self.device_json["state"].get("last_update"),
-            timeout=60,
-        ), name="MyQ_WaitForClose",
+        wait_for_state_task = asyncio.create_task(
+            self.wait_for_state(
+                current_state=[STATE_CLOSING],
+                new_state=[STATE_CLOSED],
+                last_state_update=self.device_json["state"].get("last_update"),
+                timeout=60,
+            ),
+            name="MyQ_WaitForClose",
         )
         if not wait_for_state:
             return wait_for_state_task
@@ -102,12 +114,14 @@ class MyQGaragedoor(MyQDevice):
             )
             self.state = STATE_OPENING
 
-        wait_for_state_task = asyncio.create_task(self.wait_for_state(
-            current_state=[STATE_OPENING],
-            new_state=[STATE_OPEN],
-            last_state_update=self.device_json["state"].get("last_update"),
-            timeout=60,
-        ), name="MyQ_WaitForOpen",
+        wait_for_state_task = asyncio.create_task(
+            self.wait_for_state(
+                current_state=[STATE_OPENING],
+                new_state=[STATE_OPEN],
+                last_state_update=self.device_json["state"].get("last_update"),
+                timeout=60,
+            ),
+            name="MyQ_WaitForOpen",
         )
 
         if not wait_for_state:

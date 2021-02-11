@@ -3,19 +3,16 @@ import asyncio
 import logging
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union, Tuple
 from urllib.parse import urlsplit, parse_qs
 
 from aiohttp import ClientSession, ClientResponse
 from aiohttp.client_exceptions import ClientError, ClientResponseError
 from pkce import generate_code_verifier, get_code_challenge
+from yarl import URL
 
 from .const import (
     ACCOUNTS_ENDPOINT,
-    DEVICES_ENDPOINT,
-    DEVICE_FAMILY_GARAGEDOOR,
-    DEVICE_FAMILY_GATEWAY,
-    DEVICE_FAMLY_LAMP,
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET,
     OAUTH_AUTHORIZE_URI,
@@ -24,7 +21,8 @@ from .const import (
     OAUTH_REDIRECT_URI,
 )
 from .device import MyQDevice
-from .errors import AuthenticationError, InvalidCredentialsError, RequestError
+from .account import MyQAccount
+from .errors import AuthenticationError, InvalidCredentialsError, MyQError, RequestError
 from .garagedoor import MyQGaragedoor
 from .lamp import MyQLamp
 from .request import MyQRequest, REQUEST_METHODS
@@ -55,36 +53,40 @@ class API:  # pylint: disable=too-many-instance-attributes
             None,
         )  # type: Tuple[Optional[str], Optional[datetime], Optional[datetime]]
 
-        self.accounts = {}  # type: Dict[str, str]
-        self.devices = {}  # type: Dict[str, MyQDevice]
+        self.accounts = {}  # type: Dict[str, MyQAccount]
         self.last_state_update = None  # type: Optional[datetime]
+
+    @property
+    def devices(self) -> Dict[str, Union[MyQDevice, MyQGaragedoor, MyQLamp]]:
+        """Return all devices."""
+        devices = {}
+        for account in self.accounts.values():
+            devices.update(account.devices)
+        return devices
 
     @property
     def covers(self) -> Dict[str, MyQGaragedoor]:
         """Return only those devices that are covers."""
-        return {
-            device_id: device
-            for device_id, device in self.devices.items()
-            if device.device_json["device_family"] == DEVICE_FAMILY_GARAGEDOOR
-        }
+        covers = {}
+        for account in self.accounts.values():
+            covers.update(account.covers)
+        return covers
 
     @property
-    def lamps(self) -> Dict[str, MyQDevice]:
+    def lamps(self) -> Dict[str, MyQLamp]:
         """Return only those devices that are covers."""
-        return {
-            device_id: device
-            for device_id, device in self.devices.items()
-            if device.device_json["device_family"] == DEVICE_FAMLY_LAMP
-        }
+        lamps = {}
+        for account in self.accounts.values():
+            lamps.update(account.lamps)
+        return lamps
 
     @property
     def gateways(self) -> Dict[str, MyQDevice]:
         """Return only those devices that are covers."""
-        return {
-            device_id: device
-            for device_id, device in self.devices.items()
-            if device.device_json["device_family"] == DEVICE_FAMILY_GATEWAY
-        }
+        gateways = {}
+        for account in self.accounts.values():
+            gateways.update(account.gateways)
+        return gateways
 
     @property
     def _code_verifier(self) -> str:
@@ -97,16 +99,16 @@ class API:  # pylint: disable=too-many-instance-attributes
         return self.__credentials["username"]
 
     @username.setter
-    def username(self, username: str) -> None:
+    def username(self, username: str):
         self._invalid_credentials = False
         self.__credentials["username"] = username
 
     @property
-    def password(self) -> None:
+    def password(self) -> Optional[str]:
         return None
 
     @password.setter
-    def password(self, password: str) -> None:
+    def password(self, password: str):
         self._invalid_credentials = False
         self.__credentials["password"] = password
 
@@ -114,7 +116,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         self,
         method: str,
         returns: str,
-        url: str,
+        url: Union[URL, str],
         websession: ClientSession = None,
         headers: dict = None,
         params: dict = None,
@@ -122,7 +124,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         json: dict = None,
         allow_redirects: bool = True,
         login_request: bool = False,
-    ) -> Tuple[ClientResponse, Union[dict, str, None]]:
+    ) -> Tuple[ClientResponse, Optional[Union[dict, str]]]:
         """Make a request."""
 
         # Determine the method to call based on what is to be returned.
@@ -414,6 +416,11 @@ class API:  # pylint: disable=too-many-instance-attributes
                 login_request=True,
             )
 
+            if not isinstance(data, dict):
+                raise MyQError(
+                    f"Received object data of type {type(data)} but expecting type dict"
+                )
+
             token = f"{data.get('token_type')} {data.get('access_token')}"
             try:
                 expires = int(data.get("expires_in", DEFAULT_TOKEN_REFRESH))
@@ -482,7 +489,7 @@ class API:  # pylint: disable=too-many-instance-attributes
             datetime.now(),
         )
 
-    async def _get_accounts(self) -> Optional[dict]:
+    async def _get_accounts(self) -> List:
 
         _LOGGER.debug("Retrieving account information")
 
@@ -491,104 +498,14 @@ class API:  # pylint: disable=too-many-instance-attributes
             method="get", returns="json", url=ACCOUNTS_ENDPOINT
         )
 
-        if accounts_resp is not None and accounts_resp.get("accounts") is not None:
-            accounts = {}
-            for account in accounts_resp["accounts"]:
-                account_id = account.get("id")
-                if account_id is not None:
-                    _LOGGER.debug(
-                        f"Got account {account_id} with name {account.get('name')}"
-                    )
-                    accounts.update({account_id: account.get("name")})
-        else:
-            _LOGGER.debug(f"No accounts found")
-            accounts = None
+        if accounts_resp is not None and not isinstance(accounts_resp, dict):
+            raise MyQError(
+                f"Received object accounts_resp of type {type(accounts_resp)} but expecting type dict"
+            )
 
-        return accounts
+        return accounts_resp.get("accounts", []) if accounts_resp is not None else []
 
-    async def _get_devices_for_account(self, account) -> None:
-
-        _LOGGER.debug(f"Retrieving devices for account {self.accounts[account]}")
-
-        _, devices_resp = await self.request(
-            method="get",
-            returns="json",
-            url=DEVICES_ENDPOINT.format(account_id=account),
-        )
-
-        state_update_timestmp = datetime.utcnow()
-        if devices_resp is not None and devices_resp.get("items") is not None:
-            for device in devices_resp.get("items"):
-                serial_number = device.get("serial_number")
-                if serial_number is None:
-                    _LOGGER.debug(
-                        f"No serial number for device with name {device.get('name')}."
-                    )
-                    continue
-
-                if serial_number in self.devices:
-                    _LOGGER.debug(
-                        f"Updating information for device with serial number {serial_number}"
-                    )
-                    myqdevice = self.devices[serial_number]
-
-                    # When performing commands we might update the state temporary, need to ensure
-                    # that the state is not set back to something else if MyQ does not yet have updated
-                    # state
-                    last_update = myqdevice.device_json["state"].get("last_update")
-                    myqdevice.device_json = device
-
-                    if (
-                        myqdevice.device_json["state"].get("last_update") is not None
-                        and myqdevice.device_json["state"].get("last_update")
-                        != last_update
-                    ):
-                        # MyQ has updated device state, reset ours ensuring we have the one from MyQ.
-                        myqdevice.state = None
-                        _LOGGER.debug(
-                            f"State for device {myqdevice.name} was updated to {myqdevice.state}"
-                        )
-
-                    myqdevice.state_update = state_update_timestmp
-                else:
-                    if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
-                        _LOGGER.debug(
-                            f"Adding new garage door with serial number {serial_number}"
-                        )
-                        self.devices[serial_number] = MyQGaragedoor(
-                            api=self,
-                            account=account,
-                            device_json=device,
-                            state_update=state_update_timestmp,
-                        )
-                    elif device.get("device_family") == DEVICE_FAMLY_LAMP:
-                        _LOGGER.debug(
-                            f"Adding new lamp with serial number {serial_number}"
-                        )
-                        self.devices[serial_number] = MyQLamp(
-                            api=self,
-                            account=account,
-                            device_json=device,
-                            state_update=state_update_timestmp,
-                        )
-                    elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
-                        _LOGGER.debug(
-                            f"Adding new gateway with serial number {serial_number}"
-                        )
-                        self.devices[serial_number] = MyQDevice(
-                            api=self,
-                            account=account,
-                            device_json=device,
-                            state_update=state_update_timestmp,
-                        )
-                    else:
-                        _LOGGER.warning(
-                            f"Unknown device family {device.get('device_family')}"
-                        )
-        else:
-            _LOGGER.debug(f"No devices found for account {self.accounts[account]}")
-
-    async def update_device_info(self, for_account: str = None) -> None:
+    async def update_device_info(self) -> None:
         """Get up-to-date device info."""
         # The MyQ API can time out if state updates are too frequent; therefore,
         # if back-to-back requests occur within a threshold, respond to only the first
@@ -602,40 +519,47 @@ class API:  # pylint: disable=too-many-instance-attributes
             )
 
             # Ensure we're within our minimum update interval AND update request is not for a specific device
-            if call_dt < next_available_call_dt and for_account is None:
-                _LOGGER.debug(
-                    "Ignoring device update request as it is within throttle window"
-                )
+            if call_dt < next_available_call_dt:
+                _LOGGER.debug("Ignoring update request as it is within throttle window")
                 return
 
-            _LOGGER.debug("Updating device information")
+            _LOGGER.debug("Updating account information")
             # If update request is for a specific account then do not retrieve account information.
-            if for_account is None:
-                self.accounts = await self._get_accounts()
+            accounts = await self._get_accounts()
 
-                if self.accounts is None:
-                    _LOGGER.debug(f"No accounts found")
-                    self.devices = {}
-                    accounts = {}
-                else:
-                    accounts = self.accounts
-            else:
-                # Request is for specific account, thus restrict retrieval to the 1 account.
-                if self.accounts.get(for_account) is None:
-                    # Checking to ensure we know the account, but this should never happen.
-                    _LOGGER.debug(
-                        f"Unable to perform update request for account {for_account} as it is not known."
-                    )
-                    accounts = {}
-                else:
-                    accounts = {for_account: self.accounts.get(for_account)}
+            if len(accounts) == 0:
+                _LOGGER.debug("No accounts found")
+                self.accounts = {}
+                return
 
             for account in accounts:
-                await self._get_devices_for_account(account=account)
+                print(account)
+                account_id = account.get("id")
+                if account_id is not None:
+                    if self.accounts.get(account_id):
+                        # Account already existed, update information.
+                        _LOGGER.debug(
+                            "Updating account %s with name %s",
+                            account_id,
+                            account.get("name"),
+                        )
 
-            # Update our last update timestamp UNLESS this is for a specific account
-            if for_account is None:
-                self.last_state_update = datetime.utcnow()
+                        self.accounts.get(account_id).account_json = account
+                    else:
+                        # This is a new account.
+                        _LOGGER.debug(
+                            "New account %s with name %s",
+                            account_id,
+                            account.get("name"),
+                        )
+                        self.accounts.update(
+                            {account_id: MyQAccount(api=self, account_json=account)}
+                        )
+
+                    # Perform a device update for this account.
+                    await self.accounts.get(account_id).update()
+
+            self.last_state_update = datetime.utcnow()
 
 
 async def login(username: str, password: str, websession: ClientSession = None) -> API:
@@ -647,9 +571,7 @@ async def login(username: str, password: str, websession: ClientSession = None) 
     try:
         await api.authenticate(wait=True)
     except InvalidCredentialsError as err:
-        _LOGGER.error(
-            f"Username and/or password are invalid. Update username/password."
-        )
+        _LOGGER.error("Username and/or password are invalid. Update username/password.")
         raise err
     except AuthenticationError as err:
         _LOGGER.error(f"Authentication failed: {str(err)}")

@@ -2,13 +2,13 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Union
 
 from .const import DEVICE_TYPE, WAIT_TIMEOUT
 from .errors import RequestError, MyQError
 
 if TYPE_CHECKING:
-    from .api import API
+    from .account import MyQAccount
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,19 +17,21 @@ class MyQDevice:
     """Define a generic device."""
 
     def __init__(
-        self, api: "API", device_json: dict, account: str, state_update: datetime
+        self,
+        device_json: dict,
+        account: "MyQAccount",
+        state_update: datetime,
     ) -> None:
         """Initialize.
         :type account: str
         """
-        self._api = api  # type: "API"
-        self._account = account  # type: str
-        self.device_json = device_json  # type: dict
-        self.state_update = state_update  # type: datetime
+        self._account = account
+        self.device_json = device_json
+        self.last_state_update = state_update
         self._device_state = None  # Type: Optional[str]
 
     @property
-    def account(self) -> str:
+    def account(self) -> "MyQAccount":
         """Return account associated with device"""
         return self._account
 
@@ -83,7 +85,7 @@ class MyQDevice:
         return self._device_state or self.device_state
 
     @state.setter
-    def state(self, value: str) -> None:
+    def state(self, value: str):
         """Set the current state of the device."""
         self._device_state = value
 
@@ -101,6 +103,18 @@ class MyQDevice:
         """Return whether the device can be opened unattended."""
         return False
 
+    async def close(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
+        raise NotImplementedError
+
+    async def open(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
+        raise NotImplementedError
+
+    async def turnoff(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
+        raise NotImplementedError
+
+    async def turnon(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
+        raise NotImplementedError
+
     async def _send_state_command(self, url: str, command: str) -> None:
         """Instruct the API to change the state of the device."""
         # If the user tries to open or close, say, a gateway, throw an exception:
@@ -110,7 +124,7 @@ class MyQDevice:
             )
 
         _LOGGER.debug(f"Sending command {command} for {self.name}")
-        await self._api.request(
+        await self.account.api.request(
             method="put",
             returns="response",
             url=url,
@@ -118,7 +132,7 @@ class MyQDevice:
 
     async def update(self) -> None:
         """Get the latest info for this device."""
-        await self._api.update_device_info()
+        await self.account.update()
 
     async def wait_for_state(
         self,
@@ -136,28 +150,28 @@ class MyQDevice:
             and wait_timeout > 0
         ):
             wait_timeout = wait_timeout - 5
-            await asyncio.sleep(5)
             try:
-                await self._api.update_device_info(for_account=self.account)
+                await self._account.update()
             except MyQError:
                 # Ignoring
                 pass
+            await asyncio.sleep(5)
 
         # Wait until the state is to what we want it to be
         _LOGGER.debug(f"Waiting until device state for {self.name} is {new_state}")
         wait_timeout = timeout
         while self.state in current_state and wait_timeout > 0:
             wait_timeout = wait_timeout - 5
-            await asyncio.sleep(5)
             try:
-                await self._api.update_device_info(for_account=self.account)
+                await self._account.update()
             except MyQError:
                 # Ignoring
                 pass
+            await asyncio.sleep(5)
 
         # Reset self.state ensuring it reflects actual device state. Only do this if state is still what it would
         # have been, this to ensure if something else had updated it to something else we don't override.
         if self._device_state == current_state:
-            self._device_state = None
+            self.state = None
 
         return self.state in new_state

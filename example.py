@@ -43,9 +43,9 @@ async def main() -> None:
             print(f"{EMAIL} {PASSWORD}")
             api = await login(EMAIL, PASSWORD, websession)
 
-            for account in api.accounts:
-                print(f"Account ID: {account}")
-                print(f"Account Name: {api.accounts[account]}")
+            for account in api.accounts.values():
+                print(f"Account ID: {account.account_id}")
+                print(f"Account Name: {account.name}")
 
                 # Get all devices listed with this account – note that you can use
                 # api.covers to only examine covers or api.lamps for only lamps.
@@ -106,7 +106,11 @@ async def main() -> None:
 
                                         print(f"Device {device.name} is {device.state}")
 
-                                        if wait_task and await wait_task:
+                                        if (
+                                            wait_task
+                                            and isinstance(wait_task, asyncio.Task)
+                                            and await wait_task
+                                        ):
                                             print(
                                                 f"Garage door {device.name} has been closed."
                                             )

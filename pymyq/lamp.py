@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional, Union
 from .device import MyQDevice
 
 if TYPE_CHECKING:
-    from .api import API
+    from .account import MyQAccount
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,13 +22,16 @@ class MyQLamp(MyQDevice):
     """Define a generic device."""
 
     def __init__(
-        self, api: "API", device_json: dict, account: str, state_update: datetime
+        self,
+        device_json: dict,
+        account: "MyQAccount",
+        state_update: datetime,
     ) -> None:
         """Initialize.
         :type account: str
         """
         super().__init__(
-            api=api, account=account, device_json=device_json, state_update=state_update
+            account=account, device_json=device_json, state_update=state_update
         )
 
     @property
