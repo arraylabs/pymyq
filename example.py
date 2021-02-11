@@ -94,6 +94,7 @@ async def main() -> None:
                                         )
                                     else:
                                         print(f"Closing garage door {device.name}")
+                                        wait_task = None
                                         try:
                                             wait_task = await device.close(
                                                 wait_for_state=False
@@ -105,7 +106,7 @@ async def main() -> None:
 
                                         print(f"Device {device.name} is {device.state}")
 
-                                        if await wait_task:
+                                        if wait_task and await wait_task:
                                             print(
                                                 f"Garage door {device.name} has been closed."
                                             )
