@@ -158,6 +158,6 @@ class MyQDevice:
         # Reset self.state ensuring it reflects actual device state. Only do this if state is still what it would
         # have been, this to ensure if something else had updated it to something else we don't override.
         if self._device_state == current_state:
-            self.state = None
+            self._device_state = None
 
         return self.state in new_state
