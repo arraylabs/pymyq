@@ -78,6 +78,7 @@ class MyQGaragedoor(MyQDevice):
             current_state=[STATE_CLOSING],
             new_state=[STATE_CLOSED],
             last_state_update=self.device_json["state"].get("last_update"),
+            timeout=60,
         ), name="MyQ_WaitForClose",
         )
         if not wait_for_state:
@@ -105,6 +106,7 @@ class MyQGaragedoor(MyQDevice):
             current_state=[STATE_OPENING],
             new_state=[STATE_OPEN],
             last_state_update=self.device_json["state"].get("last_update"),
+            timeout=60,
         ), name="MyQ_WaitForOpen",
         )
 

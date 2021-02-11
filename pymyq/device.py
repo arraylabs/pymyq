@@ -16,7 +16,9 @@ _LOGGER = logging.getLogger(__name__)
 class MyQDevice:
     """Define a generic device."""
 
-    def __init__(self, api: "API", device_json: dict, account: str, state_update: datetime) -> None:
+    def __init__(
+        self, api: "API", device_json: dict, account: str, state_update: datetime
+    ) -> None:
         """Initialize.
         :type account: str
         """
@@ -118,12 +120,20 @@ class MyQDevice:
         """Get the latest info for this device."""
         await self._api.update_device_info()
 
-    async def wait_for_state(self, current_state: List, new_state: List, last_state_update: datetime) -> bool:
+    async def wait_for_state(
+        self,
+        current_state: List,
+        new_state: List,
+        last_state_update: datetime,
+        timeout: int = WAIT_TIMEOUT,
+    ) -> bool:
         # First wait until door state is actually updated.
         _LOGGER.debug(f"Waiting until device state has been updated for {self.name}")
-        wait_timeout = WAIT_TIMEOUT
+        wait_timeout = timeout
         while (
-            last_state_update == self.device_json["state"].get("last_update", datetime.utcnow()) and wait_timeout > 0
+            last_state_update
+            == self.device_json["state"].get("last_update", datetime.utcnow())
+            and wait_timeout > 0
         ):
             wait_timeout = wait_timeout - 5
             await asyncio.sleep(5)
@@ -135,7 +145,7 @@ class MyQDevice:
 
         # Wait until the state is to what we want it to be
         _LOGGER.debug(f"Waiting until device state for {self.name} is {new_state}")
-        wait_timeout = WAIT_TIMEOUT
+        wait_timeout = timeout
         while self.state in current_state and wait_timeout > 0:
             wait_timeout = wait_timeout - 5
             await asyncio.sleep(5)
