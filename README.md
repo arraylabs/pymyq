@@ -72,26 +72,34 @@ asyncio.get_event_loop().run_until_complete(main())
 ```
 ## API Properties
 
-* `accounts`: dictionary with all accounts
-* `covers`: dictionary with all covers
-* `devices`: dictionary with all devices  
-* `gateways`: dictionary with all gateways
-* `lamps`: dictionary with all lamps
-* `last_state_update`: datetime (in UTC) last state update was retrieved
+* `accounts`: dictionary with all accounts (MyQAccount)
+* `covers`: dictionary with all covers (MyQGarageDoor)
+* `devices`: dictionary with all devices (MyQDevice) 
+* `gateways`: dictionary with all gateways (MyQDevice)
+* `lamps`: dictionary with all lamps (MyQLamp)
+* `last_state_update`: datetime (in UTC) last state update was retrieved for all items
 * `password`: password used for authentication. Can only be set, not retrieved
 * `username`: username for authentication.
 
-## Account Properties
+## Account Properties (MyQAccount)
 
+* `api`: Associated API object 
 * `id`: ID for the account
 * `name`: Name of the account
+* `covers`: dictionary with all covers for account (MyQGarageDoor)
+* `devices`: dictionary with all devices for account (MyQDevice) 
+* `gateways`: dictionary with all gateways for account (MyQDevice)
+* `lamps`: dictionary with all lamps for account (MyQLamp)
+* `account_json`: Dictionary containing all account information as retrieved from MyQ
+* `last_state_update`: datetime (in UTC) last state update was retrieved for all devices within this account
 
 ## Device Properties
 
-* `account`: Return account associated with device
+* `account`: Return account associated with device (MyQAccount)
 * `close_allowed`: Return whether the device can be closed unattended.
 * `device_family`: Return the family in which this device lives.
 * `device_id`: Return the device ID (serial number).
+* `device_json`: Dictionary containing all device information as retrieved from MyQ
 * `device_platform`: Return the device platform.
 * `device_type`: Return the device type.
 * `firmware_version`: Return the family in which this device lives.
@@ -110,8 +118,14 @@ These are coroutines and need to be `await`ed – see `example.py` for examples.
 * `authenticate`: Authenticate (or re-authenticate) to MyQ. Call this to
   re-authenticate immediately after changing username and/or password otherwise
   new username/password will only be used when token has to be refreshed.
-* `update_device_info`: Retrieve info and status for accounts and devices
+* `update_device_info`: Retrieve info and status for all accounts and devices
 
+
+## Account Methods
+All of the routines on the `MyQAccount` class are coroutines and need to be
+`await`ed – see `example.py` for examples.
+
+* `update`: get the latest device info (state, etc.) for all devices associated with this account.
 
 ## Device Methods
 
@@ -119,7 +133,7 @@ All of the routines on the `MyQDevice` class are coroutines and need to be
 `await`ed – see `example.py` for examples.
 
 * `update`: get the latest device info (state, etc.). Note that 
-  this runs api.update_device_info and thus all accounts/devices will be updated
+  this runs MyQAccount.update and thus all devices within account will be updated
 
 ## Cover Methods
 
