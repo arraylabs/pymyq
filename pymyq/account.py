@@ -40,7 +40,7 @@ class MyQAccount:
         return self._api
 
     @property
-    def account_id(self) -> Optional[str]:
+    def id(self) -> Optional[str]:
         """Return account id """
         return self.account_json.get("id")
 
@@ -83,12 +83,12 @@ class MyQAccount:
 
     async def _get_devices(self) -> None:
 
-        _LOGGER.debug("Retrieving devices for account %s", self.name or self.account_id)
+        _LOGGER.debug("Retrieving devices for account %s", self.name or self.id)
 
         _, devices_resp = await self._api.request(
             method="get",
             returns="json",
-            url=DEVICES_ENDPOINT.format(account_id=self.account_id),
+            url=DEVICES_ENDPOINT.format(account_id=self.id),
         )
 
         if devices_resp is not None and not isinstance(devices_resp, dict):
@@ -167,9 +167,7 @@ class MyQAccount:
                     if new_device:
                         self._devices[serial_number] = new_device
         else:
-            _LOGGER.debug(
-                f"No devices found for account {self.name or self.account_id}"
-            )
+            _LOGGER.debug(f"No devices found for account {self.name or self.id}")
 
     async def update(self) -> None:
         """Get up-to-date device info."""
@@ -188,7 +186,7 @@ class MyQAccount:
             if call_dt < next_available_call_dt:
                 _LOGGER.debug(
                     "Ignoring device update request for account %s as it is within throttle window",
-                    self.name or self.account_id,
+                    self.name or self.id,
                 )
                 return
 
