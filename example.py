@@ -44,7 +44,7 @@ async def main() -> None:
             api = await login(EMAIL, PASSWORD, websession)
 
             for account in api.accounts.values():
-                print(f"Account ID: {account.account_id}")
+                print(f"Account ID: {account.id}")
                 print(f"Account Name: {account.name}")
 
                 # Get all devices listed with this account – note that you can use
