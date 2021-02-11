@@ -19,7 +19,7 @@ DESCRIPTION = 'Python package for controlling MyQ-Enabled Garage Door'
 URL = 'https://github.com/arraylabs/pymyq'
 EMAIL = 'chris@arraylabs.com'
 AUTHOR = 'Chris Campbell'
-REQUIRES_PYTHON = '>=3.5.3'
+REQUIRES_PYTHON = '>=3.8'
 VERSION = None
 
 # What packages are required for this module to be executed?
