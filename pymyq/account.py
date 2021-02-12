@@ -111,25 +111,10 @@ class MyQAccount:
                         f"Updating information for device with serial number {serial_number}"
                     )
                     myqdevice = self._devices[serial_number]
+                    myqdevice.update(
+                        device_json=device, state_update_timestmp=state_update_timestmp
+                    )
 
-                    # When performing commands we might update the state temporary, need to ensure
-                    # that the state is not set back to something else if MyQ does not yet have updated
-                    # state
-                    last_update = myqdevice.device_json["state"].get("last_update")
-                    myqdevice.device_json = device
-
-                    if (
-                        myqdevice.device_json["state"].get("last_update") is not None
-                        and myqdevice.device_json["state"].get("last_update")
-                        != last_update
-                    ):
-                        # MyQ has updated device state, reset ours ensuring we have the one from MyQ.
-                        myqdevice.state = None
-                        _LOGGER.debug(
-                            f"State for device {myqdevice.name} was updated to {myqdevice.state}"
-                        )
-
-                    myqdevice.state_update = state_update_timestmp
                 else:
                     if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
                         _LOGGER.debug(

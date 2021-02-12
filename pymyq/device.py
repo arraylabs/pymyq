@@ -115,6 +115,25 @@ class MyQDevice:
     async def turnon(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
         raise NotImplementedError
 
+    async def update_device(self, device_json: dict, state_update_timestmp: datetime):
+        # When performing commands we might update the state temporary, need to ensure
+        # that the state is not set back to something else if MyQ does not yet have updated
+        # state
+        last_update = self.device_json["state"].get("last_update")
+        self.device_json = device_json
+
+        if (
+            self.device_json["state"].get("last_update") is not None
+            and self.device_json["state"].get("last_update") != last_update
+        ):
+            # MyQ has updated device state, reset ours ensuring we have the one from MyQ.
+            self._device_state = None
+            _LOGGER.debug(
+                "State for device %s was updated to %s", self.name, self.state
+            )
+
+        self.state_update = state_update_timestmp
+
     async def _send_state_command(self, url: str, command: str) -> None:
         """Instruct the API to change the state of the device."""
         # If the user tries to open or close, say, a gateway, throw an exception:
@@ -172,6 +191,6 @@ class MyQDevice:
         # Reset self.state ensuring it reflects actual device state. Only do this if state is still what it would
         # have been, this to ensure if something else had updated it to something else we don't override.
         if self._device_state == current_state:
-            self.state = None
+            self._device_state = None
 
         return self.state in new_state
