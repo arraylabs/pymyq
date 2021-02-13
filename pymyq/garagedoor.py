@@ -76,7 +76,7 @@ class MyQGaragedoor(MyQDevice):
             # Device is currently not closed or closing, send command to close
             await self._send_state_command(
                 url=COMMAND_URI.format(
-                    account_id=self.account,
+                    account_id=self.account.id,
                     device_serial=self.device_id,
                     command=COMMAND_CLOSE,
                 ),
@@ -106,7 +106,7 @@ class MyQGaragedoor(MyQDevice):
             # run update() before checking):
             await self._send_state_command(
                 url=COMMAND_URI.format(
-                    account_id=self.account,
+                    account_id=self.account.id,
                     device_serial=self.device_id,
                     command=COMMAND_OPEN,
                 ),

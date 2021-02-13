@@ -48,7 +48,7 @@ class MyQLamp(MyQDevice):
 
         await self._send_state_command(
             url=COMMAND_URI.format(
-                account_id=self.account,
+                account_id=self.account.id,
                 device_serial=self.device_id,
                 command=COMMAND_OFF,
             ),
@@ -76,7 +76,7 @@ class MyQLamp(MyQDevice):
 
         await self._send_state_command(
             url=COMMAND_URI.format(
-                account_id=self.account,
+                account_id=self.account.id,
                 device_serial=self.device_id,
                 command=COMMAND_ON,
             ),
