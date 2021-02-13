@@ -111,9 +111,8 @@ class MyQAccount:
                         f"Updating information for device with serial number {serial_number}"
                     )
                     myqdevice = self._devices[serial_number]
-                    myqdevice.update(
-                        device_json=device, state_update_timestmp=state_update_timestmp
-                    )
+                    myqdevice.device_json = device
+                    myqdevice.last_state_update = state_update_timestmp
 
                 else:
                     if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
