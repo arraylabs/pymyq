@@ -1,19 +1,20 @@
 """Define MyQ accounts."""
 
-import logging
 import asyncio
-from .device import MyQDevice
 from datetime import datetime, timedelta
-from .garagedoor import MyQGaragedoor
-from .lamp import MyQLamp
+import logging
 from typing import TYPE_CHECKING, Dict, Optional
+
 from .const import (
     DEVICE_FAMILY_GARAGEDOOR,
-    DEVICE_FAMLY_LAMP,
     DEVICE_FAMILY_GATEWAY,
+    DEVICE_FAMLY_LAMP,
     DEVICES_ENDPOINT,
 )
+from .device import MyQDevice
 from .errors import MyQError
+from .garagedoor import MyQGaragedoor
+from .lamp import MyQLamp
 
 if TYPE_CHECKING:
     from .api import API

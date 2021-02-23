@@ -1,7 +1,7 @@
 """Define MyQ devices."""
 import asyncio
-import logging
 from datetime import datetime
+import logging
 from typing import TYPE_CHECKING, Optional, Union
 
 from .device import MyQDevice
@@ -11,7 +11,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-COMMAND_URI = "https://account-devices-lamp.myq-cloud.com/api/v5.2/Accounts/{account_id}/lamps/{device_serial}/{command}"
+COMMAND_URI = (
+    "https://account-devices-lamp.myq-cloud.com/api/v5.2/Accounts/{account_id}"
+    "/lamps/{device_serial}/{command}"
+)
 COMMAND_ON = "on"
 COMMAND_OFF = "off"
 STATE_ON = "on"

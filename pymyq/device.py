@@ -1,11 +1,11 @@
 """Define MyQ devices."""
 import asyncio
-import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, List, Union
+import logging
+from typing import TYPE_CHECKING, List, Optional, Union
 
 from .const import DEVICE_TYPE, WAIT_TIMEOUT
-from .errors import RequestError, MyQError
+from .errors import MyQError, RequestError
 
 if TYPE_CHECKING:
     from .account import MyQAccount
@@ -28,6 +28,7 @@ class MyQDevice:
         self._account = account
         self.device_json = device_json
         self.last_state_update = state_update
+        self.state_update = None
         self._device_state = None  # Type: Optional[str]
 
     @property
@@ -82,6 +83,11 @@ class MyQDevice:
 
     @property
     def state(self) -> Optional[str]:
+        """Return current state
+
+        Returns:
+            Optional[str]: State for the device
+        """
         return self._device_state or self.device_state
 
     @state.setter
@@ -116,6 +122,14 @@ class MyQDevice:
         raise NotImplementedError
 
     async def update_device(self, device_json: dict, state_update_timestmp: datetime):
+        """Update state of device depending on last update in MyQ is after last state set
+
+        by us
+
+        Args:
+            device_json (dict): device json
+            state_update_timestmp (datetime): [description]
+        """
         # When performing commands we might update the state temporary, need to ensure
         # that the state is not set back to something else if MyQ does not yet have updated
         # state
@@ -160,6 +174,18 @@ class MyQDevice:
         last_state_update: datetime,
         timeout: int = WAIT_TIMEOUT,
     ) -> bool:
+        """Wait until device has reached new state
+
+        Args:
+            current_state (List): List of possible current states
+            new_state (List): List of new states to wait for
+            last_state_update (datetime): Last time state was updated
+            timeout (int, optional): Timeout in seconds to wait for new state.
+                                     Defaults to WAIT_TIMEOUT.
+
+        Returns:
+            bool: True if new state reached, False if new state was not reached
+        """
         # First wait until door state is actually updated.
         _LOGGER.debug("Waiting until device state has been updated for %s", self.name)
         wait_timeout = timeout
@@ -188,8 +214,9 @@ class MyQDevice:
                 pass
             await asyncio.sleep(5)
 
-        # Reset self.state ensuring it reflects actual device state. Only do this if state is still what it would
-        # have been, this to ensure if something else had updated it to something else we don't override.
+        # Reset self.state ensuring it reflects actual device state.
+        # Only do this if state is still what it would have been,
+        # this to ensure if something else had updated it to something else we don't override.
         if self._device_state == current_state:
             self._device_state = None
 
