@@ -142,7 +142,7 @@ class MyQDevice:
                 f"Cannot change state of device type: {self.device_type}"
             )
 
-        _LOGGER.debug(f"Sending command {command} for {self.name}")
+        _LOGGER.debug("Sending command %s for %s", command, self.name)
         await self.account.api.request(
             method="put",
             returns="response",
@@ -161,7 +161,7 @@ class MyQDevice:
         timeout: int = WAIT_TIMEOUT,
     ) -> bool:
         # First wait until door state is actually updated.
-        _LOGGER.debug(f"Waiting until device state has been updated for {self.name}")
+        _LOGGER.debug("Waiting until device state has been updated for %s", self.name)
         wait_timeout = timeout
         while (
             last_state_update
@@ -177,7 +177,7 @@ class MyQDevice:
             await asyncio.sleep(5)
 
         # Wait until the state is to what we want it to be
-        _LOGGER.debug(f"Waiting until device state for {self.name} is {new_state}")
+        _LOGGER.debug("Waiting until device state for %s is %s", self.name, new_state)
         wait_timeout = timeout
         while self.state in current_state and wait_timeout > 0:
             wait_timeout = wait_timeout - 5

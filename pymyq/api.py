@@ -199,7 +199,8 @@ class API:  # pylint: disable=too-many-instance-attributes
                 if self._security_token[0] is None:
                     # Wait for authentication task to be completed.
                     _LOGGER.debug(
-                        f"Waiting for updated token, last refresh was {self._security_token[2]}"
+                        "Waiting for updated token, last refresh was %s",
+                        self._security_token[2],
                     )
                     try:
                         await self.authenticate(wait=True)
@@ -217,7 +218,7 @@ class API:  # pylint: disable=too-many-instance-attributes
 
             headers["Authorization"] = self._security_token[0]
 
-            _LOGGER.debug(f"Sending {method} request to {url}.")
+            _LOGGER.debug("Sending %s request to %s.".method, url)
             # Do the request
             try:
                 # First try
@@ -432,13 +433,16 @@ class API:  # pylint: disable=too-many-instance-attributes
                 expires = int(data.get("expires_in", DEFAULT_TOKEN_REFRESH))
             except ValueError:
                 _LOGGER.debug(
-                    f"Expires {data.get('expires_in')} received is not an integer, using default."
+                    "Expires %s received is not an integer, using default.",
+                    data.get("expires_in"),
                 )
                 expires = DEFAULT_TOKEN_REFRESH * 2
 
         if expires < DEFAULT_TOKEN_REFRESH * 2:
             _LOGGER.debug(
-                f"Expires {expires} is less then default {DEFAULT_TOKEN_REFRESH}, setting to default instead."
+                "Expires %s is less then default %s, setting to default instead.",
+                expires,
+                DEFAULT_TOKEN_REFRESH,
             )
             expires = DEFAULT_TOKEN_REFRESH * 2
 
@@ -459,7 +463,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         if self._authentication_task is None:
             # No authentication task is currently running, start one
             _LOGGER.debug(
-                f"Scheduling token refresh, last refresh was {self._security_token[2]}"
+                "Scheduling token refresh, last refresh was %s", self._security_token[2]
             )
             self._authentication_task = asyncio.create_task(
                 self._authenticate(), name="MyQ_Authenticate"
@@ -488,7 +492,7 @@ class API:  # pylint: disable=too-many-instance-attributes
                 "Authentication response did not contain a security token yet one is expected."
             )
 
-        _LOGGER.debug(f"Received token that will expire in {expires} seconds")
+        _LOGGER.debug("Received token that will expire in %s seconds", expires)
         self._security_token = (
             token,
             datetime.utcnow() + timedelta(seconds=int(expires / 2)),
@@ -573,21 +577,22 @@ async def login(username: str, password: str, websession: ClientSession = None) 
 
     # Retrieve user agent from GitHub if not provided for login.
     _LOGGER.debug("No user agent provided, trying to retrieve from GitHub.")
-    url = f"https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
+    url = "https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
 
     try:
         async with ClientSession() as session:
             async with session.get(url) as resp:
                 useragent = await resp.text()
                 resp.raise_for_status()
-                _LOGGER.debug(f"Retrieved user agent {useragent} from GitHub.")
+                _LOGGER.debug("Retrieved user agent %s from GitHub.", useragent)
 
     except ClientError as exc:
         # Default user agent to random string with length of 5 if failure to retrieve it from GitHub.
         useragent = "#RANDOM:5"
         _LOGGER.warning(
-            f"Failed retrieving user agent from GitHub, will use randomized user agent "
-            f"instead: {str(exc)}"
+            "Failed retrieving user agent from GitHub, will use randomized user agent "
+            "instead: %s",
+            str(exc),
         )
 
     # Check if value for useragent is to create a random user agent.
@@ -598,8 +603,10 @@ async def login(username: str, password: str, websession: ClientSession = None) 
             randomlength = int(useragent_list[1]) if len(useragent_list) == 2 else 5
         except ValueError:
             _LOGGER.debug(
-                f"Random length value {useragent_list[1]} in user agent {useragent} is not an integer. "
-                f"Setting to 5 instead."
+                "Random length value %s in user agent %s is not an integer. "
+                "Setting to 5 instead.",
+                useragent_list[1],
+                useragent,
             )
             randomlength = 5
 
@@ -607,7 +614,7 @@ async def login(username: str, password: str, websession: ClientSession = None) 
         useragent = "".join(
             choices(string.ascii_letters + string.digits, k=randomlength)
         )
-        _LOGGER.debug(f"User agent set to randomized value: {useragent}.")
+        _LOGGER.debug("User agent set to randomized value: %s.", useragent)
 
     # Set the user agent in the headers.
     api = API(
@@ -620,7 +627,7 @@ async def login(username: str, password: str, websession: ClientSession = None) 
         _LOGGER.error("Username and/or password are invalid. Update username/password.")
         raise err
     except AuthenticationError as err:
-        _LOGGER.error(f"Authentication failed: {str(err)}")
+        _LOGGER.error("Authentication failed: %s", str(err))
         raise err
 
     # Retrieve and store initial set of devices:

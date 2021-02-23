@@ -47,15 +47,21 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
             if attempt != 0:
                 wait_for = min(2 ** attempt, 5)
                 _LOGGER.debug(
-                    f'Request failed with "{last_status} {last_error}" '
-                    f'(attempt #{attempt}/{DEFAULT_REQUEST_RETRIES})"; trying again in {wait_for} seconds'
+                    'Request failed with "%s %s" (attempt #%s/%s)"; trying again in %s seconds',
+                    last_status,
+                    last_error,
+                    attempt,
+                    DEFAULT_REQUEST_RETRIES,
+                    wait_for,
                 )
                 await asyncio.sleep(wait_for)
 
             attempt += 1
             try:
                 _LOGGER.debug(
-                    f"Sending myq api request {url} and headers {headers} with connection pooling"
+                    "Sending myq api request %s and headers %s with connection pooling",
+                    url,
+                    headers,
                 )
                 resp = await websession.request(
                     method,
@@ -70,13 +76,16 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                 )
 
                 _LOGGER.debug("Response:")
-                _LOGGER.debug(f"    Response Code: {resp.status}")
-                _LOGGER.debug(f"    Headers: {resp.raw_headers}")
-                _LOGGER.debug(f"    Body: {await resp.text()}")
+                _LOGGER.debug("    Response Code: %s", resp.status)
+                _LOGGER.debug("    Headers: %s", resp.raw_headers)
+                _LOGGER.debug("    Body: %s", await resp.text())
                 return resp
             except ClientResponseError as err:
                 _LOGGER.debug(
-                    f"Attempt {attempt} request failed with exception : {err.status} - {err.message}"
+                    "Attempt %s request failed with exception : %s - %s",
+                    attempt,
+                    err.status,
+                    err.message,
                 )
                 if err.status == 401:
                     raise err
@@ -85,7 +94,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                 resp_exc = err
             except ClientError as err:
                 _LOGGER.debug(
-                    f"Attempt {attempt} request failed with exception:: {str(err)}"
+                    "Attempt %s request failed with exception: %s", attempt, str(err)
                 )
                 last_status = ""
                 last_error = str(err)

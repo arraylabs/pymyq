@@ -80,7 +80,9 @@ async def main() -> None:
                                                 )
                                         except MyQError as err:
                                             _LOGGER.error(
-                                                f"Error when trying to open {device.name}: {str(err)}"
+                                                "Error when trying to open %s: %s",
+                                                device.name,
+                                                str(err),
                                             )
                                 else:
                                     print(
@@ -101,7 +103,9 @@ async def main() -> None:
                                             )
                                         except MyQError as err:
                                             _LOGGER.error(
-                                                f"Error when trying to close {device.name}: {str(err)}"
+                                                "Error when trying to close %s: %s",
+                                                device.name,
+                                                str(err),
                                             )
 
                                         print(f"Device {device.name} is {device.state}")
