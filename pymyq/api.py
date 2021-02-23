@@ -1,33 +1,31 @@
 """Define the MyQ API."""
 import asyncio
-import logging
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union, Tuple
-from urllib.parse import urlsplit, parse_qs
-from random import choices
-import string
+import logging
+from typing import Dict, List, Optional, Tuple, Union
+from urllib.parse import parse_qs, urlsplit
 
-from aiohttp import ClientSession, ClientResponse
+from aiohttp import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientError, ClientResponseError
+from bs4 import BeautifulSoup
 from pkce import generate_code_verifier, get_code_challenge
 from yarl import URL
 
+from .account import MyQAccount
 from .const import (
     ACCOUNTS_ENDPOINT,
-    OAUTH_CLIENT_ID,
-    OAUTH_CLIENT_SECRET,
     OAUTH_AUTHORIZE_URI,
     OAUTH_BASE_URI,
-    OAUTH_TOKEN_URI,
+    OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
     OAUTH_REDIRECT_URI,
+    OAUTH_TOKEN_URI,
 )
 from .device import MyQDevice
-from .account import MyQAccount
 from .errors import AuthenticationError, InvalidCredentialsError, MyQError, RequestError
 from .garagedoor import MyQGaragedoor
 from .lamp import MyQLamp
-from .request import MyQRequest, REQUEST_METHODS
+from .request import REQUEST_METHODS, MyQRequest
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,13 +41,10 @@ class API:  # pylint: disable=too-many-instance-attributes
         username: str,
         password: str,
         websession: ClientSession = None,
-        useragent: Optional[str] = None,
     ) -> None:
         """Initialize."""
         self.__credentials = {"username": username, "password": password}
-        self._myqrequests = MyQRequest(
-            websession or ClientSession(), useragent=useragent
-        )
+        self._myqrequests = MyQRequest(websession or ClientSession())
         self._authentication_task = None  # type:Optional[asyncio.Task]
         self._codeverifier = None  # type: Optional[str]
         self._invalid_credentials = False  # type: bool
@@ -104,21 +99,85 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     @property
     def username(self) -> str:
+        """Username used to authenticate with on MyQ
+
+        Returns:
+            str: username
+        """
         return self.__credentials["username"]
 
     @username.setter
     def username(self, username: str):
+        """Set username to use for authentication
+
+        Args:
+            username (str): Username to authenticate with
+        """
         self._invalid_credentials = False
         self.__credentials["username"] = username
 
     @property
     def password(self) -> Optional[str]:
+        """Will return None, password retrieval is not possible
+
+        Returns:
+            None
+        """
         return None
 
     @password.setter
     def password(self, password: str):
+        """Set password used to authenticate with
+
+        Args:
+            password (str): password
+        """
         self._invalid_credentials = False
         self.__credentials["password"] = password
+
+    async def _authentication_task_completed(self) -> None:
+        # If we had something for an authentication task and
+        # it is done then get the result and clear it out.
+        if self._authentication_task is not None:
+            authentication_task = await self.authenticate(wait=False)
+            if authentication_task.done():
+                _LOGGER.debug(
+                    "Scheduled token refresh completed, ensuring no exception."
+                )
+                self._authentication_task = None
+                try:
+                    # Get the result so any exception is raised.
+                    authentication_task.result()
+                except asyncio.CancelledError:
+                    pass
+                except (RequestError, AuthenticationError) as auth_err:
+                    message = f"Scheduled token refresh failed: {str(auth_err)}"
+                    _LOGGER.debug(message)
+
+    async def _refresh_token(self) -> None:
+        # Check if token has to be refreshed.
+        if (
+            self._security_token[1] is None
+            or self._security_token[1] <= datetime.utcnow()
+        ):
+            # Token has to be refreshed, get authentication task if running otherwise
+            # start a new one.
+            if self._security_token[0] is None:
+                # Wait for authentication task to be completed.
+                _LOGGER.debug(
+                    "Waiting for updated token, last refresh was %s",
+                    self._security_token[2],
+                )
+                try:
+                    await self.authenticate(wait=True)
+                except AuthenticationError as auth_err:
+                    message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                    _LOGGER.debug(message)
+                    raise AuthenticationError(message) from auth_err
+            else:
+                # We still have a token, we can continue this request with
+                # that token and schedule task to refresh token unless one is already running
+                await self.authenticate(wait=False)
 
     async def request(
         self,
@@ -132,7 +191,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         json: dict = None,
         allow_redirects: bool = True,
         login_request: bool = False,
-    ) -> Tuple[ClientResponse, Optional[Union[dict, str]]]:
+    ) -> Tuple[Optional[ClientResponse], Optional[Union[dict, str]]]:
         """Make a request."""
 
         # Determine the method to call based on what is to be returned.
@@ -160,12 +219,12 @@ class API:  # pylint: disable=too-many-instance-attributes
                     f"Error requesting data from {url}: {err.status} - {err.message}"
                 )
                 _LOGGER.debug(message)
-                raise RequestError(message)
+                raise RequestError(message) from err
 
             except ClientError as err:
                 message = f"Error requesting data from {url}: {str(err)}"
                 _LOGGER.debug(message)
-                raise RequestError(message)
+                raise RequestError(message) from err
 
         # The MyQ API can time out if multiple concurrent requests are made, so
         # ensure that only one gets through at a time.
@@ -173,55 +232,20 @@ class API:  # pylint: disable=too-many-instance-attributes
         # we're sending the request anyways as we know there is no active request now.
         async with self._lock:
 
-            # If we had something for an authentication task and it is done then get the result and clear it out.
-            if self._authentication_task is not None:
-                authentication_task = await self.authenticate(wait=False)
-                if authentication_task.done():
-                    _LOGGER.debug(
-                        "Scheduled token refresh completed, ensuring no exception."
-                    )
-                    self._authentication_task = None
-                    try:
-                        # Get the result so any exception is raised.
-                        authentication_task.result()
-                    except asyncio.CancelledError:
-                        pass
-                    except (RequestError, AuthenticationError) as auth_err:
-                        message = f"Scheduled token refresh failed: {str(auth_err)}"
-                        _LOGGER.debug(message)
+            # Check if an authentication task was running and if so, if it has completed.
+            await self._authentication_task_completed()
 
-            # Check if token has to be refreshed.
-            if (
-                self._security_token[1] is None
-                or self._security_token[1] <= datetime.utcnow()
-            ):
-                # Token has to be refreshed, get authentication task if running otherwise start a new one.
-                if self._security_token[0] is None:
-                    # Wait for authentication task to be completed.
-                    _LOGGER.debug(
-                        "Waiting for updated token, last refresh was %s",
-                        self._security_token[2],
-                    )
-                    try:
-                        await self.authenticate(wait=True)
-                    except AuthenticationError as auth_err:
-                        message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
-                        _LOGGER.debug(message)
-                        raise AuthenticationError(message)
-                else:
-                    # We still have a token, we can continue this request with that token and schedule
-                    # task to refresh token unless one is already running
-                    await self.authenticate(wait=False)
+            # Check if token has to be refreshed and start task to refresh, wait if required now.
+            await self._refresh_token()
 
             if not headers:
                 headers = {}
 
             headers["Authorization"] = self._security_token[0]
 
-            _LOGGER.debug("Sending %s request to %s.".method, url)
-            # Do the request
-            try:
-                # First try
+            _LOGGER.debug("Sending %s request to %s.", method, url)
+            # Do the request. We will try 2 times based on response.
+            for attempt in range(2):
                 try:
                     return await call_method(
                         method=method,
@@ -234,51 +258,30 @@ class API:  # pylint: disable=too-many-instance-attributes
                         allow_redirects=allow_redirects,
                     )
                 except ClientResponseError as err:
-                    # Handle only if status is 401, we then re-authenticate and retry the request
-                    if err.status == 401:
-                        self._security_token = (None, None, self._security_token[2])
-                        _LOGGER.debug("Status 401 received, re-authenticating.")
-                        try:
-                            await self.authenticate(wait=True)
-                        except AuthenticationError as auth_err:
-                            # Raise authentication error, we need a new token to continue and not getting it right
-                            # now.
-                            message = f"Error trying to re-authenticate to myQ service: {str(auth_err)}"
+                    message = f"Error requesting data from {url}: {err.status} - {err.message}"
+
+                    if getattr(err, "status") and err.status == 401:
+                        if attempt == 0:
+                            self._security_token = (None, None, self._security_token[2])
+                            _LOGGER.debug("Status 401 received, re-authenticating.")
+
+                            await self._refresh_token()
+                        else:
+                            # Received unauthorized again,
+                            # reset token and start task to get a new one.
                             _LOGGER.debug(message)
-                            raise AuthenticationError(message)
+                            self._security_token = (None, None, self._security_token[2])
+                            await self.authenticate(wait=False)
+                            raise AuthenticationError(message) from err
                     else:
-                        # Some other error, re-raise.
-                        raise err
+                        _LOGGER.debug(message)
+                        raise RequestError(message) from err
 
-                # Re-authentication worked, resend request that had failed.
-                return await call_method(
-                    method=method,
-                    url=url,
-                    websession=websession,
-                    headers=headers,
-                    params=params,
-                    data=data,
-                    json=json,
-                    allow_redirects=allow_redirects,
-                )
-
-            except ClientResponseError as err:
-                message = (
-                    f"Error requesting data from {url}: {err.status} - {err.message}"
-                )
-                _LOGGER.debug(message)
-                if getattr(err, "status") and err.status == 401:
-                    # Received unauthorized, reset token and start task to get a new one.
-                    self._security_token = (None, None, self._security_token[2])
-                    await self.authenticate(wait=False)
-                    raise AuthenticationError(message)
-
-                raise RequestError(message)
-
-            except ClientError as err:
-                message = f"Error requesting data from {url}: {str(err)}"
-                _LOGGER.debug(message)
-                raise RequestError(message)
+                except ClientError as err:
+                    message = f"Error requesting data from {url}: {str(err)}"
+                    _LOGGER.debug(message)
+                    raise RequestError(message) from err
+        return None, None
 
     async def _oauth_authenticate(self) -> Tuple[str, int]:
 
@@ -308,7 +311,8 @@ class API:  # pylint: disable=too-many-instance-attributes
             _LOGGER.debug("Scanning login page for fields to return")
             soup = BeautifulSoup(html, "html.parser")
 
-            # Go through all potential forms in the page returned. This is in case multiple forms are returned.
+            # Go through all potential forms in the page returned.
+            # This is in case multiple forms are returned.
             forms = soup.find_all("form")
             data = {}
             for form in forms:
@@ -473,10 +477,10 @@ class API:  # pylint: disable=too-many-instance-attributes
             try:
                 await self._authentication_task
             except (RequestError, AuthenticationError) as auth_err:
-                # Raise authentication error, we need a new token to continue and not getting it right
-                # now.
+                # Raise authentication error, we need a new token to continue
+                # and not getting it right now.
                 self._authentication_task = None
-                raise AuthenticationError(str(auth_err))
+                raise AuthenticationError(str(auth_err)) from auth_err
             self._authentication_task = None
 
         return self._authentication_task
@@ -510,7 +514,8 @@ class API:  # pylint: disable=too-many-instance-attributes
 
         if accounts_resp is not None and not isinstance(accounts_resp, dict):
             raise MyQError(
-                f"Received object accounts_resp of type {type(accounts_resp)} but expecting type dict"
+                f"Received object accounts_resp of type {type(accounts_resp)}"
+                f"but expecting type dict"
             )
 
         return accounts_resp.get("accounts", []) if accounts_resp is not None else []
@@ -528,7 +533,8 @@ class API:  # pylint: disable=too-many-instance-attributes
                 self.last_state_update + DEFAULT_STATE_UPDATE_INTERVAL
             )
 
-            # Ensure we're within our minimum update interval AND update request is not for a specific device
+            # Ensure we're within our minimum update interval AND
+            # update request is not for a specific device
             if call_dt < next_available_call_dt:
                 _LOGGER.debug("Ignoring update request as it is within throttle window")
                 return
@@ -575,51 +581,8 @@ class API:  # pylint: disable=too-many-instance-attributes
 async def login(username: str, password: str, websession: ClientSession = None) -> API:
     """Log in to the API."""
 
-    # Retrieve user agent from GitHub if not provided for login.
-    _LOGGER.debug("No user agent provided, trying to retrieve from GitHub.")
-    url = "https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
-
-    try:
-        async with ClientSession() as session:
-            async with session.get(url) as resp:
-                useragent = await resp.text()
-                resp.raise_for_status()
-                _LOGGER.debug("Retrieved user agent %s from GitHub.", useragent)
-
-    except ClientError as exc:
-        # Default user agent to random string with length of 5 if failure to retrieve it from GitHub.
-        useragent = "#RANDOM:5"
-        _LOGGER.warning(
-            "Failed retrieving user agent from GitHub, will use randomized user agent "
-            "instead: %s",
-            str(exc),
-        )
-
-    # Check if value for useragent is to create a random user agent.
-    useragent_list = useragent.split(":")
-    if useragent_list[0] == "#RANDOM":
-        # Create a random string, check if length is provided for the random string, if not then default is 5.
-        try:
-            randomlength = int(useragent_list[1]) if len(useragent_list) == 2 else 5
-        except ValueError:
-            _LOGGER.debug(
-                "Random length value %s in user agent %s is not an integer. "
-                "Setting to 5 instead.",
-                useragent_list[1],
-                useragent,
-            )
-            randomlength = 5
-
-        # Create the random user agent.
-        useragent = "".join(
-            choices(string.ascii_letters + string.digits, k=randomlength)
-        )
-        _LOGGER.debug("User agent set to randomized value: %s.", useragent)
-
     # Set the user agent in the headers.
-    api = API(
-        username=username, password=password, websession=websession, useragent=useragent
-    )
+    api = API(username=username, password=password, websession=websession)
     _LOGGER.debug("Performing initial authentication into MyQ")
     try:
         await api.authenticate(wait=True)
