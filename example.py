@@ -6,7 +6,6 @@ from aiohttp import ClientSession
 
 from pymyq import login
 from pymyq.account import MyQAccount
-from pymyq.api import API
 from pymyq.errors import MyQError, RequestError
 from pymyq.garagedoor import STATE_CLOSED, STATE_OPEN
 
@@ -42,22 +41,16 @@ def print_info(number: int, device):
     print("      ---------")
 
 
-async def print_garagedoors(api: API, account: MyQAccount):
+async def print_garagedoors(account: MyQAccount):
     """Print garage door information and open/close if requested
 
     Args:
-        api (API): API object for the connection
         account (MyQAccount): Account for which to retrieve garage doors
     """
-    print(f"  GarageDoors: {len(api.covers)}")
+    print(f"  GarageDoors: {len(account.covers)}")
     print("  ---------------")
-    if len(api.covers) != 0:
-        for idx, device_id in enumerate(
-            device_id
-            for device_id in api.covers
-            if api.devices[device_id].account == account
-        ):
-            device = api.devices[device_id]
+    if len(account.covers) != 0:
+        for idx, device in enumerate(account.covers.values()):
             print_info(number=idx, device=device)
 
             if ISSUE_COMMANDS:
@@ -112,22 +105,16 @@ async def print_garagedoors(api: API, account: MyQAccount):
         print("  ------------------------------")
 
 
-async def print_lamps(api: API, account: MyQAccount):
+async def print_lamps(account: MyQAccount):
     """Print lamp information and turn on/off if requested
 
     Args:
-        api (API): API object for the connection
         account (MyQAccount): Account for which to retrieve lamps
     """
-    print(f"  Lamps: {len(api.lamps)}")
+    print(f"  Lamps: {len(account.lamps)}")
     print("  ---------")
-    if len(api.lamps) != 0:
-        for idx, device_id in enumerate(
-            device_id
-            for device_id in api.lamps
-            if api.devices[device_id].account == account
-        ):
-            device = api.devices[device_id]
+    if len(account.lamps) != 0:
+        for idx, device in enumerate(account.lamps.values()):
             print_info(number=idx, device=device)
 
             if ISSUE_COMMANDS:
@@ -142,22 +129,16 @@ async def print_lamps(api: API, account: MyQAccount):
         print("  ------------------------------")
 
 
-async def print_gateways(api: API, account: MyQAccount):
+async def print_gateways(account: MyQAccount):
     """Print gateways for account
 
     Args:
-        api (API): API object for the connection
         account (MyQAccount): Account for which to gateways
     """
-    print(f"  Gateways: {len(api.gateways)}")
+    print(f"  Gateways: {len(account.gateways)}")
     print("  ------------")
-    if len(api.gateways) != 0:
-        for idx, device_id in enumerate(
-            device_id
-            for device_id in api.gateways
-            if api.devices[device_id].account == account
-        ):
-            device = api.devices[device_id]
+    if len(account.gateways) != 0:
+        for idx, device in enumerate(account.gateways.values()):
             print_info(number=idx, device=device)
 
     print("------------------------------")
@@ -178,11 +159,11 @@ async def main() -> None:
 
                 # Get all devices listed with this account – note that you can use
                 # api.covers to only examine covers or api.lamps for only lamps.
-                await print_garagedoors(api=api, account=account)
+                await print_garagedoors(account=account)
 
-                await print_lamps(api=api, account=account)
+                await print_lamps(account=account)
 
-                await print_gateways(api=api, account=account)
+                await print_gateways(account=account)
 
         except MyQError as err:
             _LOGGER.error("There was an error: %s", err)
