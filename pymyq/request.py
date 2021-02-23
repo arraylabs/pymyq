@@ -19,11 +19,12 @@ DEFAULT_REQUEST_RETRIES = 5
 class MyQRequest:  # pylint: disable=too-many-instance-attributes
     """Define a class to handle requests to MyQ"""
 
-    def __init__(self, websession: ClientSession = None) -> None:
+    def __init__(self, websession: ClientSession = None, useragent: str = None) -> None:
         self._websession = websession or ClientSession()
+        self._useragent = useragent
 
-    @staticmethod
     async def _send_request(
+        self,
         method: str,
         url: str,
         websession: ClientSession,
@@ -38,16 +39,24 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         resp_exc = None
         last_status = ""
         last_error = ""
+
+        if self._useragent is not None:
+            headers.update({"User-Agent": self._useragent})
+
         while attempt < DEFAULT_REQUEST_RETRIES:
             if attempt != 0:
                 wait_for = min(2 ** attempt, 5)
-                _LOGGER.debug(f'Request failed with "{last_status} {last_error}" '
-                              f'(attempt #{attempt}/{DEFAULT_REQUEST_RETRIES})"; trying again in {wait_for} seconds')
+                _LOGGER.debug(
+                    f'Request failed with "{last_status} {last_error}" '
+                    f'(attempt #{attempt}/{DEFAULT_REQUEST_RETRIES})"; trying again in {wait_for} seconds'
+                )
                 await asyncio.sleep(wait_for)
 
             attempt += 1
             try:
-                _LOGGER.debug(f"Sending myq api request {url} and headers {headers} with connection pooling")
+                _LOGGER.debug(
+                    f"Sending myq api request {url} and headers {headers} with connection pooling"
+                )
                 resp = await websession.request(
                     method,
                     url,

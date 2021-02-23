@@ -5,6 +5,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Union, Tuple
 from urllib.parse import urlsplit, parse_qs
+from random import choices
+import string
 
 from aiohttp import ClientSession, ClientResponse
 from aiohttp.client_exceptions import ClientError, ClientResponseError
@@ -39,11 +41,17 @@ class API:  # pylint: disable=too-many-instance-attributes
     """Define a class for interacting with the MyQ iOS App API."""
 
     def __init__(
-        self, username: str, password: str, websession: ClientSession = None
+        self,
+        username: str,
+        password: str,
+        websession: ClientSession = None,
+        useragent: Optional[str] = None,
     ) -> None:
         """Initialize."""
         self.__credentials = {"username": username, "password": password}
-        self._myqrequests = MyQRequest(websession or ClientSession())
+        self._myqrequests = MyQRequest(
+            websession or ClientSession(), useragent=useragent
+        )
         self._authentication_task = None  # type:Optional[asyncio.Task]
         self._codeverifier = None  # type: Optional[str]
         self._invalid_credentials = False  # type: bool
@@ -381,7 +389,6 @@ class API:  # pylint: disable=too-many-instance-attributes
                 websession=session,
                 headers={
                     "Cookie": resp.cookies.output(attrs=[]),
-                    "User-Agent": "null",
                 },
                 allow_redirects=False,
                 login_request=True,
@@ -398,7 +405,6 @@ class API:  # pylint: disable=too-many-instance-attributes
                 websession=session,
                 headers={
                     "Content-Type": "application/x-www-form-urlencoded",
-                    "User-Agent": "null",
                 },
                 data={
                     "client_id": OAUTH_CLIENT_ID,
@@ -641,8 +647,48 @@ class API:  # pylint: disable=too-many-instance-attributes
 async def login(username: str, password: str, websession: ClientSession = None) -> API:
     """Log in to the API."""
 
+    # Retrieve user agent from GitHub if not provided for login.
+    _LOGGER.debug("No user agent provided, trying to retrieve from GitHub.")
+    url = f"https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
+
+    try:
+        async with ClientSession() as session:
+            async with session.get(url) as resp:
+                useragent = await resp.text()
+                resp.raise_for_status()
+                _LOGGER.debug(f"Retrieved user agent {useragent} from GitHub.")
+
+    except ClientError as exc:
+        # Default user agent to random string with length of 5 if failure to retrieve it from GitHub.
+        useragent = "#RANDOM:5"
+        _LOGGER.warning(
+            f"Failed retrieving user agent from GitHub, will use randomized user agent "
+            f"instead: {str(exc)}"
+        )
+
+    # Check if value for useragent is to create a random user agent.
+    useragent_list = useragent.split(":")
+    if useragent_list[0] == "#RANDOM":
+        # Create a random string, check if length is provided for the random string, if not then default is 5.
+        try:
+            randomlength = int(useragent_list[1]) if len(useragent_list) == 2 else 5
+        except ValueError:
+            _LOGGER.debug(
+                f"Random length value {useragent_list[1]} in user agent {useragent} is not an integer. "
+                f"Setting to 5 instead."
+            )
+            randomlength = 5
+
+        # Create the random user agent.
+        useragent = "".join(
+            choices(string.ascii_letters + string.digits, k=randomlength)
+        )
+        _LOGGER.debug(f"User agent set to randomized value: {useragent}.")
+
     # Set the user agent in the headers.
-    api = API(username=username, password=password, websession=websession)
+    api = API(
+        username=username, password=password, websession=websession, useragent=useragent
+    )
     _LOGGER.debug("Performing initial authentication into MyQ")
     try:
         await api.authenticate(wait=True)
