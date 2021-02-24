@@ -103,13 +103,14 @@ class MyQAccount:
                 serial_number = device.get("serial_number")
                 if serial_number is None:
                     _LOGGER.debug(
-                        f"No serial number for device with name {device.get('name')}."
+                        "No serial number for device with name %s.", device.get("name")
                     )
                     continue
 
                 if serial_number in self._devices:
                     _LOGGER.debug(
-                        f"Updating information for device with serial number {serial_number}"
+                        "Updating information for device with serial number %s",
+                        serial_number,
                     )
                     myqdevice = self._devices[serial_number]
                     myqdevice.device_json = device
@@ -118,7 +119,8 @@ class MyQAccount:
                 else:
                     if device.get("device_family") == DEVICE_FAMILY_GARAGEDOOR:
                         _LOGGER.debug(
-                            f"Adding new garage door with serial number {serial_number}"
+                            "Adding new garage door with serial number %s",
+                            serial_number,
                         )
                         new_device = MyQGaragedoor(
                             account=self,
@@ -127,7 +129,7 @@ class MyQAccount:
                         )
                     elif device.get("device_family") == DEVICE_FAMLY_LAMP:
                         _LOGGER.debug(
-                            f"Adding new lamp with serial number {serial_number}"
+                            "Adding new lamp with serial number %s", serial_number
                         )
                         new_device = MyQLamp(
                             account=self,
@@ -136,7 +138,7 @@ class MyQAccount:
                         )
                     elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
                         _LOGGER.debug(
-                            f"Adding new gateway with serial number {serial_number}"
+                            "Adding new gateway with serial number %s", serial_number
                         )
                         new_device = MyQDevice(
                             account=self,
@@ -145,14 +147,14 @@ class MyQAccount:
                         )
                     else:
                         _LOGGER.warning(
-                            f"Unknown device family {device.get('device_family')}"
+                            "Unknown device family %s", device.get("device_family")
                         )
                         new_device = None
 
                     if new_device:
                         self._devices[serial_number] = new_device
         else:
-            _LOGGER.debug(f"No devices found for account {self.name or self.id}")
+            _LOGGER.debug("No devices found for account %s", self.name or self.id)
 
     async def update(self) -> None:
         """Get up-to-date device info."""
