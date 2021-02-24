@@ -30,11 +30,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         self._last_useragent_update = None
 
     async def _get_useragent(self) -> None:
-        """Retrieve a user agent to use in headers.
-
-        Returns:
-            str: user agent
-        """
+        """Retrieve a user agent to use in headers."""
 
         # Only see to retrieve a user agent if currently we do not have one,
         # we do not have an datetime on when we last retrieved one,
@@ -72,6 +68,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                 str(exc),
             )
 
+        useragent = useragent.strip()
         # Check if value for useragent is to create a random user agent.
         useragent_list = useragent.split(":")
         if useragent_list[0] == "#RANDOM":
@@ -118,7 +115,8 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
             if self._useragent is None:
                 await self._get_useragent()
 
-            headers.update({"User-Agent": self._useragent})
+            if self._useragent is not None and self._useragent != "":
+                headers.update({"User-Agent": self._useragent})
 
             if attempt != 0:
                 wait_for = min(2 ** attempt, 5)
