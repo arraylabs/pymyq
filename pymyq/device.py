@@ -37,24 +37,24 @@ class MyQDevice:
         return self._account
 
     @property
-    def device_family(self) -> str:
+    def device_family(self) -> Optional[str]:
         """Return the family in which this device lives."""
-        return self.device_json["device_family"]
+        return self.device_json.get("device_family")
 
     @property
-    def device_id(self) -> str:
+    def device_id(self) -> Optional[str]:
         """Return the device ID (serial number)."""
-        return self.device_json["serial_number"]
+        return self.device_json.get("serial_number")
 
     @property
-    def device_platform(self) -> str:
+    def device_platform(self) -> Optional[str]:
         """Return the device platform."""
-        return self.device_json["device_platform"]
+        return self.device_json.get("device_platform")
 
     @property
-    def device_type(self) -> str:
+    def device_type(self) -> Optional[str]:
         """Return the device type."""
-        return self.device_json[DEVICE_TYPE]
+        return self.device_json.get(DEVICE_TYPE)
 
     @property
     def firmware_version(self) -> Optional[str]:
@@ -62,14 +62,18 @@ class MyQDevice:
         return self.device_json["state"].get("firmware_version")
 
     @property
-    def name(self) -> bool:
+    def name(self) -> Optional[str]:
         """Return the device name."""
-        return self.device_json["name"]
+        return self.device_json.get("name")
 
     @property
     def online(self) -> bool:
         """Return whether the device is online."""
-        return self.device_json["state"].get("online") is True
+        state = self.device_json.get("state")
+        if state is None:
+            return False
+
+        return state.get("online") is True
 
     @property
     def parent_device_id(self) -> Optional[str]:

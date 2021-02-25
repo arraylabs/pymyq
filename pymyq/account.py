@@ -66,7 +66,7 @@ class MyQAccount:
 
     @property
     def lamps(self) -> Dict[str, MyQLamp]:
-        """Return only those devices that are covers."""
+        """Return only those devices that are lamps."""
         return {
             device_id: device
             for device_id, device in self.devices.items()
@@ -75,11 +75,21 @@ class MyQAccount:
 
     @property
     def gateways(self) -> Dict[str, MyQDevice]:
-        """Return only those devices that are covers."""
+        """Return only those devices that are gateways."""
         return {
             device_id: device
             for device_id, device in self.devices.items()
             if device.device_json["device_family"] == DEVICE_FAMILY_GATEWAY
+        }
+
+    @property
+    def other(self) -> Dict[str, MyQDevice]:
+        """Return only those devices that are covers."""
+        return {
+            device_id: device
+            for device_id, device in self.devices.items()
+            if type(device) is MyQDevice
+            and device.device_json["device_family"] != DEVICE_FAMILY_GATEWAY
         }
 
     async def _get_devices(self) -> None:
@@ -136,20 +146,24 @@ class MyQAccount:
                             device_json=device,
                             state_update=state_update_timestmp,
                         )
-                    elif device.get("device_family") == DEVICE_FAMILY_GATEWAY:
-                        _LOGGER.debug(
-                            "Adding new gateway with serial number %s", serial_number
-                        )
+                    else:
+                        if device.get("device_family") == DEVICE_FAMILY_GATEWAY:
+                            _LOGGER.debug(
+                                "Adding new gateway with serial number %s",
+                                serial_number,
+                            )
+                        else:
+                            _LOGGER.debug(
+                                "Adding unknown device family %s with serial number %s",
+                                device.get("device_family"),
+                                serial_number,
+                            )
+
                         new_device = MyQDevice(
                             account=self,
                             device_json=device,
                             state_update=state_update_timestmp,
                         )
-                    else:
-                        _LOGGER.warning(
-                            "Unknown device family %s", device.get("device_family")
-                        )
-                        new_device = None
 
                     if new_device:
                         self._devices[serial_number] = new_device

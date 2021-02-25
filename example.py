@@ -133,12 +133,27 @@ async def print_gateways(account: MyQAccount):
     """Print gateways for account
 
     Args:
-        account (MyQAccount): Account for which to gateways
+        account (MyQAccount): Account for which to retrieve gateways
     """
     print(f"  Gateways: {len(account.gateways)}")
     print("  ------------")
     if len(account.gateways) != 0:
         for idx, device in enumerate(account.gateways.values()):
+            print_info(number=idx, device=device)
+
+    print("------------------------------")
+
+
+async def print_other(account: MyQAccount):
+    """Print unknown/other devices for account
+
+    Args:
+        account (MyQAccount): Account for which to retrieve unknown devices
+    """
+    print(f"  Other: {len(account.other)}")
+    print("  ------------")
+    if len(account.other) != 0:
+        for idx, device in enumerate(account.other.values()):
             print_info(number=idx, device=device)
 
     print("------------------------------")
