@@ -5,7 +5,6 @@ import logging
 from typing import TYPE_CHECKING, Optional, Union
 
 from .device import MyQDevice
-from .errors import RequestError
 
 if TYPE_CHECKING:
     from .account import MyQAccount
@@ -23,7 +22,6 @@ STATE_CLOSING = "closing"
 STATE_OPEN = "open"
 STATE_OPENING = "opening"
 STATE_STOPPED = "stopped"
-STATE_TRANSITION = "transition"
 STATE_UNKNOWN = "unknown"
 
 
@@ -64,72 +62,30 @@ class MyQGaragedoor(MyQDevice):
 
     async def close(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
         """Close the device."""
-        if self.state != self.device_state:
-            raise RequestError(
-                f"Device is currently {self.state}, wait until complete."
-            )
 
-        if self.state not in (STATE_CLOSED, STATE_CLOSING):
-            # If our state is different from device state,
-            # then it means an action is already being performed.
-            if self.state != self.device_state:
-                raise RequestError(
-                    f"Device is currently {self.state}, wait until complete."
-                )
-
-            # Device is currently not closed or closing, send command to close
-            await self._send_state_command(
-                url=COMMAND_URI.format(
-                    account_id=self.account.id,
-                    device_serial=self.device_id,
-                    command=COMMAND_CLOSE,
-                ),
+        return await self._send_state_command(
+            to_state=STATE_CLOSED,
+            intermediate_state=STATE_CLOSING,
+            url=COMMAND_URI.format(
+                account_id=self.account.id,
+                device_serial=self.device_id,
                 command=COMMAND_CLOSE,
-            )
-            self.state = STATE_CLOSING
-
-        wait_for_state_task = asyncio.create_task(
-            self.wait_for_state(
-                current_state=[STATE_CLOSING],
-                new_state=[STATE_CLOSED],
-                last_state_update=self.device_json["state"].get("last_update"),
-                timeout=60,
             ),
-            name="MyQ_WaitForClose",
+            command=COMMAND_CLOSE,
+            wait_for_state=wait_for_state,
         )
-        if not wait_for_state:
-            return wait_for_state_task
-
-        _LOGGER.debug("Waiting till garage is closed")
-        return await wait_for_state_task
 
     async def open(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
         """Open the device."""
-        if self.state not in (STATE_OPEN, STATE_OPENING):
-            # Set the current state to "opening" right away (in case the user doesn't
-            # run update() before checking):
-            await self._send_state_command(
-                url=COMMAND_URI.format(
-                    account_id=self.account.id,
-                    device_serial=self.device_id,
-                    command=COMMAND_OPEN,
-                ),
+
+        return await self._send_state_command(
+            to_state=STATE_OPEN,
+            intermediate_state=STATE_OPENING,
+            url=COMMAND_URI.format(
+                account_id=self.account.id,
+                device_serial=self.device_id,
                 command=COMMAND_OPEN,
-            )
-            self.state = STATE_OPENING
-
-        wait_for_state_task = asyncio.create_task(
-            self.wait_for_state(
-                current_state=[STATE_OPENING],
-                new_state=[STATE_OPEN],
-                last_state_update=self.device_json["state"].get("last_update"),
-                timeout=60,
             ),
-            name="MyQ_WaitForOpen",
+            command=COMMAND_OPEN,
+            wait_for_state=wait_for_state,
         )
-
-        if not wait_for_state:
-            return wait_for_state_task
-
-        _LOGGER.debug("Waiting till garage is open")
-        return await wait_for_state_task

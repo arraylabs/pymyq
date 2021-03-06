@@ -30,6 +30,8 @@ class MyQDevice:
         self.last_state_update = state_update
         self.state_update = None
         self._device_state = None  # Type: Optional[str]
+        self._send_command_lock = asyncio.Lock()  # type: asyncio.Lock
+        self._wait_for_state_task = None
 
     @property
     def account(self) -> "MyQAccount":
@@ -152,20 +154,76 @@ class MyQDevice:
 
         self.state_update = state_update_timestmp
 
-    async def _send_state_command(self, url: str, command: str) -> None:
-        """Instruct the API to change the state of the device."""
+    async def _send_state_command(
+        self,
+        to_state: str,
+        intermediate_state: str,
+        url: str,
+        command: str,
+        wait_for_state: bool = False,
+    ) -> Union[asyncio.Task, bool]:
+        """Send command to device to change state."""
+
         # If the user tries to open or close, say, a gateway, throw an exception:
         if not self.state:
             raise RequestError(
                 f"Cannot change state of device type: {self.device_type}"
             )
 
-        _LOGGER.debug("Sending command %s for %s", command, self.name)
-        await self.account.api.request(
-            method="put",
-            returns="response",
-            url=url,
-        )
+        async with self._send_command_lock:
+            # If currently there is a wait_for_state task running,
+            # then wait until it completes first.
+            if self._wait_for_state_task is not None:
+                # Return wait task if we're currently waiting for same task to be completed
+                if self.state == intermediate_state and not wait_for_state:
+                    _LOGGER.debug(
+                        "Command %s for %s was already send, returning wait task for it instead",
+                        command,
+                        self.name,
+                    )
+                    return self._wait_for_state_task
+
+                _LOGGER.debug(
+                    "Another command for %s is still in progress, waiting for it to complete first before issuing command %s",
+                    self.name,
+                    command,
+                )
+                await self._wait_for_state_task
+
+            # We return true if state is already closed.
+            if self.state == to_state:
+                _LOGGER.debug(
+                    "Device %s is in state %s, nothing to do.", self.name, to_state
+                )
+                return True
+
+            _LOGGER.debug("Sending command %s for %s", command, self.name)
+            await self.account.api.request(
+                method="put",
+                returns="response",
+                url=url,
+            )
+
+            self.state = intermediate_state
+
+            self._wait_for_state_task = asyncio.create_task(
+                self.wait_for_state(
+                    current_state=[self.state],
+                    new_state=[to_state],
+                    last_state_update=self.device_json["state"].get("last_update"),
+                    timeout=60,
+                ),
+                name="MyQ_WaitFor" + to_state,
+            )
+
+            # Make sure our wait task starts
+            await asyncio.sleep(0)
+
+        if not wait_for_state:
+            return self._wait_for_state_task
+
+        _LOGGER.debug("Waiting till device is %s", to_state)
+        return await self._wait_for_state_task
 
     async def update(self) -> None:
         """Get the latest info for this device."""
@@ -209,7 +267,7 @@ class MyQDevice:
         # Wait until the state is to what we want it to be
         _LOGGER.debug("Waiting until device state for %s is %s", self.name, new_state)
         wait_timeout = timeout
-        while self.state in current_state and wait_timeout > 0:
+        while self.device_state not in new_state and wait_timeout > 0:
             wait_timeout = wait_timeout - 5
             try:
                 await self._account.update()
@@ -221,7 +279,8 @@ class MyQDevice:
         # Reset self.state ensuring it reflects actual device state.
         # Only do this if state is still what it would have been,
         # this to ensure if something else had updated it to something else we don't override.
-        if self._device_state == current_state:
+        if self._device_state in current_state or self._device_state in new_state:
             self._device_state = None
 
+        self._wait_for_state_task = None
         return self.state in new_state

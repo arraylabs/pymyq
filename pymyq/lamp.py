@@ -19,6 +19,8 @@ COMMAND_ON = "on"
 COMMAND_OFF = "off"
 STATE_ON = "on"
 STATE_OFF = "off"
+STATE_TURNINGOFF = "turning off"
+STATE_TURNINGON = "turning on"
 
 
 class MyQLamp(MyQDevice):
@@ -49,55 +51,29 @@ class MyQLamp(MyQDevice):
     async def turnoff(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
         """Turn light off."""
 
-        await self._send_state_command(
+        return await self._send_state_command(
+            to_state=STATE_OFF,
+            intermediate_state=STATE_TURNINGOFF,
             url=COMMAND_URI.format(
                 account_id=self.account.id,
                 device_serial=self.device_id,
                 command=COMMAND_OFF,
             ),
             command=COMMAND_OFF,
+            wait_for_state=wait_for_state,
         )
-        self.state = STATE_OFF
-
-        wait_for_state_task = asyncio.create_task(
-            self.wait_for_state(
-                current_state=[STATE_ON],
-                new_state=[STATE_OFF],
-                last_state_update=self.device_json["state"].get("last_update"),
-                timeout=30,
-            ),
-            name="MyQ_WaitForOff",
-        )
-        if not wait_for_state:
-            return wait_for_state_task
-
-        _LOGGER.debug("Waiting till light is off")
-        return await wait_for_state_task
 
     async def turnon(self, wait_for_state: bool = False) -> Union[asyncio.Task, bool]:
         """Turn light on."""
 
-        await self._send_state_command(
+        return await self._send_state_command(
+            to_state=STATE_ON,
+            intermediate_state=STATE_TURNINGON,
             url=COMMAND_URI.format(
                 account_id=self.account.id,
                 device_serial=self.device_id,
                 command=COMMAND_ON,
             ),
             command=COMMAND_ON,
+            wait_for_state=wait_for_state,
         )
-        self.state = STATE_ON
-
-        wait_for_state_task = asyncio.create_task(
-            self.wait_for_state(
-                current_state=[STATE_ON],
-                new_state=[STATE_OFF],
-                last_state_update=self.device_json["state"].get("last_update"),
-                timeout=30,
-            ),
-            name="MyQ_WaitForOn",
-        )
-        if not wait_for_state:
-            return wait_for_state_task
-
-        _LOGGER.debug("Waiting till light is on")
-        return await wait_for_state_task

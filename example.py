@@ -13,7 +13,9 @@ _LOGGER = logging.getLogger()
 
 EMAIL = "<EMAIL>"
 PASSWORD = "<PASSWORD>"
-ISSUE_COMMANDS = False
+ISSUE_COMMANDS = True
+# LOGLEVEL = logging.DEBUG
+LOGLEVEL = logging.WARNING
 
 
 def print_info(number: int, device):
@@ -41,7 +43,7 @@ def print_info(number: int, device):
     print("      ---------")
 
 
-async def print_garagedoors(account: MyQAccount):
+async def print_garagedoors(account: MyQAccount):  # noqa: C901
     """Print garage door information and open/close if requested
 
     Args:
@@ -55,33 +57,43 @@ async def print_garagedoors(account: MyQAccount):
 
             if ISSUE_COMMANDS:
                 try:
+                    open_task = None
+                    opened = closed = False
                     if device.open_allowed:
                         if device.state == STATE_OPEN:
                             print(f"Garage door {device.name} is already open")
                         else:
                             print(f"Opening garage door {device.name}")
                             try:
-                                if await device.open(wait_for_state=True):
-                                    print(f"Garage door {device.name} has been opened.")
-                                else:
-                                    print(f"Failed to open garage door {device.name}.")
+                                open_task = await device.open(wait_for_state=False)
                             except MyQError as err:
                                 _LOGGER.error(
                                     "Error when trying to open %s: %s",
                                     device.name,
                                     str(err),
                                 )
+                            print(f"Garage door {device.name} is {device.state}")
+
                     else:
                         print(f"Opening of garage door {device.name} is not allowed.")
+
+                    # We're not waiting for opening to be completed before we do call to close.
+                    # The API will wait automatically for the open to complete before then
+                    # processing the command to close.
 
                     if device.close_allowed:
                         if device.state == STATE_CLOSED:
                             print(f"Garage door {device.name} is already closed")
                         else:
-                            print(f"Closing garage door {device.name}")
-                            wait_task = None
+                            if open_task is None:
+                                print(f"Closing garage door {device.name}")
+                            else:
+                                print(
+                                    f"Already requesting closing garage door {device.name}"
+                                )
+
                             try:
-                                wait_task = await device.close(wait_for_state=False)
+                                closed = await device.close(wait_for_state=True)
                             except MyQError as err:
                                 _LOGGER.error(
                                     "Error when trying to close %s: %s",
@@ -89,16 +101,19 @@ async def print_garagedoors(account: MyQAccount):
                                     str(err),
                                 )
 
-                            print(f"Device {device.name} is {device.state}")
+                    if open_task is not None and not isinstance(open_task, bool):
+                        opened = await open_task
 
-                            if (
-                                wait_task
-                                and isinstance(wait_task, asyncio.Task)
-                                and await wait_task
-                            ):
-                                print(f"Garage door {device.name} has been closed.")
-                            else:
-                                print(f"Failed to close garage door {device.name}.")
+                    if opened and closed:
+                        print(
+                            f"Garage door {device.name} was opened and then closed again."
+                        )
+                    elif opened:
+                        print(f"Garage door {device.name} was opened but not closed.")
+                    elif closed:
+                        print(f"Garage door {device.name} was closed but not opened.")
+                    else:
+                        print(f"Garage door {device.name} was not opened nor closed.")
 
                 except RequestError as err:
                     _LOGGER.error(err)
@@ -161,7 +176,7 @@ async def print_other(account: MyQAccount):
 
 async def main() -> None:
     """Create the aiohttp session and run the example."""
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=LOGLEVEL)
     async with ClientSession() as websession:
         try:
             # Create an API object:
