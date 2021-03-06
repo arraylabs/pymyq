@@ -19,8 +19,6 @@ COMMAND_ON = "on"
 COMMAND_OFF = "off"
 STATE_ON = "on"
 STATE_OFF = "off"
-STATE_TURNINGOFF = "turning off"
-STATE_TURNINGON = "turning on"
 
 
 class MyQLamp(MyQDevice):
@@ -53,7 +51,7 @@ class MyQLamp(MyQDevice):
 
         return await self._send_state_command(
             to_state=STATE_OFF,
-            intermediate_state=STATE_TURNINGOFF,
+            intermediate_state=STATE_OFF,
             url=COMMAND_URI.format(
                 account_id=self.account.id,
                 device_serial=self.device_id,
@@ -68,7 +66,7 @@ class MyQLamp(MyQDevice):
 
         return await self._send_state_command(
             to_state=STATE_ON,
-            intermediate_state=STATE_TURNINGON,
+            intermediate_state=STATE_ON,
             url=COMMAND_URI.format(
                 account_id=self.account.id,
                 device_serial=self.device_id,
