@@ -170,33 +170,33 @@ class MyQDevice:
                 f"Cannot change state of device type: {self.device_type}"
             )
 
-        async with self._send_command_lock:
-            # If currently there is a wait_for_state task running,
-            # then wait until it completes first.
-            if self._wait_for_state_task is not None:
-                # Return wait task if we're currently waiting for same task to be completed
-                if self.state == intermediate_state and not wait_for_state:
-                    _LOGGER.debug(
-                        "Command %s for %s was already send, returning wait task for it instead",
-                        command,
-                        self.name,
-                    )
-                    return self._wait_for_state_task
-
+        # If currently there is a wait_for_state task running,
+        # then wait until it completes first.
+        if self._wait_for_state_task is not None:
+            # Return wait task if we're currently waiting for same task to be completed
+            if self.state == intermediate_state and not wait_for_state:
                 _LOGGER.debug(
-                    "Another command for %s is still in progress, waiting for it to complete first before issuing command %s",
-                    self.name,
+                    "Command %s for %s was already send, returning wait task for it instead",
                     command,
+                    self.name,
                 )
-                await self._wait_for_state_task
+                return self._wait_for_state_task
 
-            # We return true if state is already closed.
-            if self.state == to_state:
-                _LOGGER.debug(
-                    "Device %s is in state %s, nothing to do.", self.name, to_state
-                )
-                return True
+            _LOGGER.debug(
+                "Another command for %s is still in progress, waiting for it to complete first before issuing command %s",
+                self.name,
+                command,
+            )
+            await self._wait_for_state_task
 
+        # We return true if state is already closed.
+        if self.state == to_state:
+            _LOGGER.debug(
+                "Device %s is in state %s, nothing to do.", self.name, to_state
+            )
+            return True
+
+        async with self._send_command_lock:
             _LOGGER.debug("Sending command %s for %s", command, self.name)
             await self.account.api.request(
                 method="put",
