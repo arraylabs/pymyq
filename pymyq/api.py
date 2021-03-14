@@ -644,27 +644,29 @@ class API:  # pylint: disable=too-many-instance-attributes
                 self.last_state_update = datetime.utcnow()
 
 
-async def login(username: str, password: str, websession: ClientSession = None) -> API:
+async def login(username: str, password: str, websession: ClientSession = None,
+                useragent: Optional[str] = None) -> API:
     """Log in to the API."""
 
-    # Retrieve user agent from GitHub if not provided for login.
-    _LOGGER.debug("No user agent provided, trying to retrieve from GitHub.")
-    url = f"https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
+    if not useragent:
+        # Retrieve user agent from GitHub if not provided for login.
+        _LOGGER.debug("No user agent provided, trying to retrieve from GitHub.")
+        url = f"https://raw.githubusercontent.com/arraylabs/pymyq/master/.USER_AGENT"
 
-    try:
-        async with ClientSession() as session:
-            async with session.get(url) as resp:
-                useragent = await resp.text()
-                resp.raise_for_status()
-                _LOGGER.debug(f"Retrieved user agent {useragent} from GitHub.")
+        try:
+            async with ClientSession() as session:
+                async with session.get(url) as resp:
+                    useragent = await resp.text()
+                    resp.raise_for_status()
+                    _LOGGER.debug(f"Retrieved user agent {useragent} from GitHub.")
 
-    except ClientError as exc:
-        # Default user agent to random string with length of 5 if failure to retrieve it from GitHub.
-        useragent = "#RANDOM:5"
-        _LOGGER.warning(
-            f"Failed retrieving user agent from GitHub, will use randomized user agent "
-            f"instead: {str(exc)}"
-        )
+        except ClientError as exc:
+            # Default user agent to random string with length of 5 if failure to retrieve it from GitHub.
+            useragent = "#RANDOM:5"
+            _LOGGER.warning(
+                f"Failed retrieving user agent from GitHub, will use randomized user agent "
+                f"instead: {str(exc)}"
+            )
 
     # Check if value for useragent is to create a random user agent.
     useragent_list = useragent.split(":")
