@@ -112,9 +112,6 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         last_error = ""
 
         for attempt in range(DEFAULT_REQUEST_RETRIES):
-            if self._useragent is None:
-                await self._get_useragent()
-
             if self._useragent is not None and self._useragent != "":
                 headers.update({"User-Agent": self._useragent})
 
