@@ -578,7 +578,12 @@ class API:  # pylint: disable=too-many-instance-attributes
             self.last_state_update = datetime.utcnow()
 
 
-async def login(username: str, password: str, websession: ClientSession = None) -> API:
+async def login(
+    username: str,
+    password: str,
+    websession: ClientSession = None,
+    auth_only: bool = False,
+) -> API:
     """Log in to the API."""
 
     # Set the user agent in the headers.
@@ -593,8 +598,9 @@ async def login(username: str, password: str, websession: ClientSession = None) 
         _LOGGER.error("Authentication failed: %s", str(err))
         raise err
 
-    # Retrieve and store initial set of devices:
-    _LOGGER.debug("Retrieving MyQ information")
-    await api.update_device_info()
+    if not auth_only:
+        # Retrieve and store initial set of devices:
+        _LOGGER.debug("Retrieving MyQ information")
+        await api.update_device_info()
 
     return api
