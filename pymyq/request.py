@@ -112,6 +112,8 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         last_error = ""
 
         for attempt in range(DEFAULT_REQUEST_RETRIES):
+            if self._useragent is None:
+                await self._get_useragent()
             if self._useragent is not None and self._useragent != "":
                 headers.update({"User-Agent": self._useragent})
 
@@ -171,17 +173,9 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                     await self._get_useragent()
 
             except ClientError as err:
-                if err.errno == 54 and attempt == 0:
-                    _LOGGER.debug(
-                        "Received error status 54, connection reset. Will refresh user agent."
-                    )
-                    await self._get_useragent()
-                else:
-                    _LOGGER.debug(
-                        "Attempt %s request failed with exception: %s",
-                        attempt,
-                        str(err),
-                    )
+                _LOGGER.debug(
+                    "Attempt %s request failed with exception: %s", attempt, str(err)
+                )
                 last_status = ""
                 last_error = str(err)
                 resp_exc = err
