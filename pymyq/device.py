@@ -189,7 +189,7 @@ class MyQDevice:
             )
             await self._wait_for_state_task
 
-        # We return true if state is already closed.
+        # We return true if current state is already in new state.
         if self.state == to_state:
             _LOGGER.debug(
                 "Device %s is in state %s, nothing to do.", self.name, to_state
