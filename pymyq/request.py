@@ -171,9 +171,10 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                     await self._get_useragent()
 
             except ClientError as err:
-                if err.errno == 54 and attempt == 0:
+                if err.errno in (54, 104) and attempt == 0:
                     _LOGGER.debug(
-                        "Received error status 54, connection reset. Will refresh user agent."
+                        "Received error status %s, connection reset. Will refresh user agent.",
+                        err.errno,
                     )
                     await self._get_useragent()
                 else:
