@@ -8,7 +8,12 @@ import string
 from typing import Optional, Tuple
 
 from aiohttp import ClientResponse, ClientSession
-from aiohttp.client_exceptions import ClientError, ClientOSError, ClientResponseError
+from aiohttp.client_exceptions import (
+    ClientError,
+    ClientOSError,
+    ClientResponseError,
+    ServerDisconnectedError,
+)
 
 from .errors import RequestError
 
@@ -170,11 +175,12 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                     )
                     await self._get_useragent()
 
-            except ClientOSError as err:
-                if err.errno in (54, 104) and attempt == 0:
+            except (ClientOSError, ServerDisconnectedError) as err:
+                errno = getattr(err, "errno", -1)
+                if errno in (-1, 54, 104) and attempt == 0:
                     _LOGGER.debug(
                         "Received error status %s, connection reset. Will refresh user agent.",
-                        err.errno,
+                        errno,
                     )
                     await self._get_useragent()
                 else:
