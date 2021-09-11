@@ -549,7 +549,6 @@ class API:  # pylint: disable=too-many-instance-attributes
                 return
 
             for account in accounts:
-                print(account)
                 account_id = account.get("id")
                 if account_id is not None:
                     if self.accounts.get(account_id):
