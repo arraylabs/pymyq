@@ -144,6 +144,20 @@ async def print_lamps(account: MyQAccount):
         print("  ------------------------------")
 
 
+async def print_locks(account: MyQAccount):
+    """Print lock information - currently unable to control locks
+
+    Args:
+        account (MyQAccount): Account for which to retrieve locks
+    """
+    print(f"  Locks: {len(account.locks)}")
+    print("  ---------")
+    if len(account.locks) != 0:
+        for idx, device in enumerate(account.locks.values()):
+            print_info(number=idx, device=device)
+        print("  ------------------------------")
+
+
 async def print_gateways(account: MyQAccount):
     """Print gateways for account
 
@@ -193,7 +207,11 @@ async def main() -> None:
 
                 await print_lamps(account=account)
 
+                await print_locks(account=account)
+
                 await print_gateways(account=account)
+
+                await print_other(account=account)
 
         except MyQError as err:
             _LOGGER.error("There was an error: %s", err)
