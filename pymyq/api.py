@@ -25,6 +25,7 @@ from .device import MyQDevice
 from .errors import AuthenticationError, InvalidCredentialsError, MyQError, RequestError
 from .garagedoor import MyQGaragedoor
 from .lamp import MyQLamp
+from .lock import MyQLock
 from .request import REQUEST_METHODS, MyQRequest
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class API:  # pylint: disable=too-many-instance-attributes
         self.last_state_update = None  # type: Optional[datetime]
 
     @property
-    def devices(self) -> Dict[str, Union[MyQDevice, MyQGaragedoor, MyQLamp]]:
+    def devices(self) -> Dict[str, Union[MyQDevice, MyQGaragedoor, MyQLamp, MyQLock]]:
         """Return all devices."""
         devices = {}
         for account in self.accounts.values():
@@ -77,15 +78,23 @@ class API:  # pylint: disable=too-many-instance-attributes
 
     @property
     def lamps(self) -> Dict[str, MyQLamp]:
-        """Return only those devices that are covers."""
+        """Return only those devices that are lamps."""
         lamps = {}
         for account in self.accounts.values():
             lamps.update(account.lamps)
         return lamps
 
     @property
+    def locks(self) -> Dict[str, MyQLock]:
+        """Return only those devices that are locks."""
+        locks = {}
+        for account in self.accounts.values():
+            locks.update(account.locks)
+        return locks
+
+    @property
     def gateways(self) -> Dict[str, MyQDevice]:
-        """Return only those devices that are covers."""
+        """Return only those devices that are gateways."""
         gateways = {}
         for account in self.accounts.values():
             gateways.update(account.gateways)
@@ -549,7 +558,6 @@ class API:  # pylint: disable=too-many-instance-attributes
                 return
 
             for account in accounts:
-                print(account)
                 account_id = account.get("id")
                 if account_id is not None:
                     if self.accounts.get(account_id):

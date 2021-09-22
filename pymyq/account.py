@@ -8,13 +8,15 @@ from typing import TYPE_CHECKING, Dict, Optional
 from .const import (
     DEVICE_FAMILY_GARAGEDOOR,
     DEVICE_FAMILY_GATEWAY,
-    DEVICE_FAMLY_LAMP,
+    DEVICE_FAMILY_LAMP,
+    DEVICE_FAMILY_LOCK,
     DEVICES_ENDPOINT,
 )
 from .device import MyQDevice
 from .errors import MyQError
 from .garagedoor import MyQGaragedoor
 from .lamp import MyQLamp
+from .lock import MyQLock
 
 if TYPE_CHECKING:
     from .api import API
@@ -83,8 +85,17 @@ class MyQAccount:
         }
 
     @property
+    def locks(self) -> Dict[str, MyQDevice]:
+        """Return only those devices that are locks."""
+        return {
+            device_id: device
+            for device_id, device in self.devices.items()
+            if device.device_json["device_family"] == DEVICE_FAMILY_LOCK
+        }
+
+    @property
     def other(self) -> Dict[str, MyQDevice]:
-        """Return only those devices that are covers."""
+        """Return only those devices that are others."""
         return {
             device_id: device
             for device_id, device in self.devices.items()
@@ -137,11 +148,20 @@ class MyQAccount:
                             device_json=device,
                             state_update=state_update_timestmp,
                         )
-                    elif device.get("device_family") == DEVICE_FAMLY_LAMP:
+                    elif device.get("device_family") == DEVICE_FAMILY_LAMP:
                         _LOGGER.debug(
                             "Adding new lamp with serial number %s", serial_number
                         )
                         new_device = MyQLamp(
+                            account=self,
+                            device_json=device,
+                            state_update=state_update_timestmp,
+                        )
+                    elif device.get("device_family") == DEVICE_FAMILY_LOCK:
+                        _LOGGER.debug(
+                            "Adding new lock with serial number %s", serial_number
+                        )
+                        new_device = MyQLock(
                             account=self,
                             device_json=device,
                             state_update=state_update_timestmp,
