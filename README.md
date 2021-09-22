@@ -60,6 +60,10 @@ async def main() -> None:
       devices = myq.lamps
       # >>> {"serial_number123": <Device>}
 
+      # Return only locks devices:
+      devices = myq.locks
+      # >>> {"serial_number123": <Device>}
+      
       # Return only gateway devices:
       devices = myq.gateways
       # >>> {"serial_number123": <Device>}
@@ -79,6 +83,7 @@ asyncio.get_event_loop().run_until_complete(main())
 - `devices`: dictionary with all devices (MyQDevice)
 - `gateways`: dictionary with all gateways (MyQDevice)
 - `lamps`: dictionary with all lamps (MyQLamp)
+- `locks`: dictionary with all locks (MyQLock)
 - `last_state_update`: datetime (in UTC) last state update was retrieved for all items
 - `password`: password used for authentication. Can only be set, not retrieved
 - `username`: username for authentication.
@@ -92,6 +97,7 @@ asyncio.get_event_loop().run_until_complete(main())
 - `devices`: dictionary with all devices for account (MyQDevice)
 - `gateways`: dictionary with all gateways for account (MyQDevice)
 - `lamps`: dictionary with all lamps for account (MyQLamp)
+- `locks`: dictionary with all locks for account (MyQLock)
 - `account_json`: Dictionary containing all account information as retrieved from MyQ
 - `last_state_update`: datetime (in UTC) last state update was retrieved for all devices within this account
 
