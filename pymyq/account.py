@@ -29,10 +29,12 @@ DEFAULT_STATE_UPDATE_INTERVAL = timedelta(seconds=5)
 class MyQAccount:
     """Define an account."""
 
-    def __init__(self, api: "API", account_json: dict, devices: dict = {}) -> None:
+    def __init__(self, api: "API", account_json: dict, devices: Optional[dict] = None) -> None:
 
         self._api = api
         self.account_json = account_json
+        if devices is None:
+            devices = {}
         self._devices = devices
         self.last_state_update = None  # type: Optional[datetime]
         self._update = asyncio.Lock()  # type: asyncio.Lock
