@@ -52,6 +52,11 @@ class MyQGaragedoor(MyQDevice):
         return self.device_json["state"].get("is_unattended_open_allowed") is True
 
     @property
+    def low_battery(self) -> bool:
+        """Return whether the device has low battery."""
+        return self.device_json["state"].get("dps_low_battery_mode") is True
+
+    @property
     def device_state(self) -> Optional[str]:
         """Return the current state of the device."""
         return (
