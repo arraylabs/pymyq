@@ -63,7 +63,7 @@ async def main() -> None:
       # Return only locks devices:
       devices = myq.locks
       # >>> {"serial_number123": <Device>}
-      
+
       # Return only gateway devices:
       devices = myq.gateways
       # >>> {"serial_number123": <Device>}
@@ -118,6 +118,7 @@ asyncio.get_event_loop().run_until_complete(main())
 - `parent_device_id`: Return the device ID (serial number) of this device's parent.
 - `state`: Return the current state of the device.
 - `state_update`: Returns datetime when device was last updated
+- `low_battery`: Returns if the garage has a low battery or not.
 
 ## API Methods
 
