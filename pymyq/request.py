@@ -172,7 +172,7 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
 
                 if err.status in (400, 403) and attempt == 0:
                     _LOGGER.debug(
-                        "Received error status 400, bad request. Will refresh user agent."
+                        "Received error status %d, bad request. Will refresh user agent.", err.status
                     )
                     await self._get_useragent()
 
