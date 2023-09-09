@@ -117,9 +117,10 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
         last_error = ""
 
         for attempt in range(DEFAULT_REQUEST_RETRIES):
-            if self._useragent is not None and self._useragent != "":
+            if self._useragent is None:
+                await self._get_useragent()
+            if self._useragent != "":
                 headers.update({"User-Agent": self._useragent})
-
             if attempt != 0:
                 wait_for = min(2 ** attempt, 5)
                 _LOGGER.debug(
@@ -169,9 +170,9 @@ class MyQRequest:  # pylint: disable=too-many-instance-attributes
                 last_error = err.message
                 resp_exc = err
 
-                if err.status == 400 and attempt == 0:
+                if err.status in (400, 403) and attempt == 0:
                     _LOGGER.debug(
-                        "Received error status 400, bad request. Will refresh user agent."
+                        "Received error status %d, bad request. Will refresh user agent.", err.status
                     )
                     await self._get_useragent()
 
