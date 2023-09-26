@@ -4,6 +4,8 @@ This is a Python 3.8+ module aiming to interact with the Chamberlain MyQ API.
 
 Code is licensed under the MIT license.
 
+ It is recommended that you consider using an open-source solution instead of a myq such as [Ratgdo](https://github.com/RATGDO/esphome-ratgdo)
+
 # [Homeassistant](https://home-assistant.io)
 
 [Homeassistant](https://home-assistant.io) has a [core myQ component](https://www.home-assistant.io/integrations/myq/) leveraging this package.

@@ -1,0 +1,56 @@
+[tool.poetry]
+name = "python-myq"
+version = "3.1.6"
+description = "Python package for controlling MyQ-Enabled Garage Door."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/Lash-L/pymyq"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries",
+]
+packages = [{include = "pymyq"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+aiohttp = "^3.7"
+beautifulsoup4 = "^4.9.3"
+pkce = "^1.0.2"
+
+[build-system]
+requires = ["poetry-core==1.6.1"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pytest-asyncio = "*"
+pytest = "*"
+pre-commit = "^3.2.2"
+black = "^22.12.0"
+flake8 = "^6.0.0"
+isort = "^5.11.2"
+pylint= "^2.6.0"
+setuptools = "^53.0.0"
+twine = "^3.3.0"
+wheel = "^0.36.2"
+pytest = "^6.2.2"
+pytest-cov = "^2.11.1"
+pytest-timeout = "^1.4.2"
+
+
+[tool.semantic_release]
+branch = "main"
+version_toml = "pyproject.toml:tool.poetry.version"
+version_variables = ["pymyq/__version__.py:__version__"]
+build_command = "pip install poetry && poetry build"
+
+[tool.isort]
+profile = "black"
+
+[tool.flake8]
+ignore =[ "E203", "E266", "E501", "W503"]
+max-line-length = 80
+max-complexity = 18
+select = ["B","C","E","F","W","T4","B9"]
