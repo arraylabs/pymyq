@@ -1,7 +1,8 @@
 """Define the MyQ API."""
 import asyncio
-from datetime import datetime, timedelta
+import base64
 import logging
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlsplit
 
@@ -17,12 +18,16 @@ from .const import (
     OAUTH_AUTHORIZE_URI,
     OAUTH_BASE_URI,
     OAUTH_CLIENT_ID,
-    OAUTH_CLIENT_SECRET,
     OAUTH_REDIRECT_URI,
     OAUTH_TOKEN_URI,
 )
 from .device import MyQDevice
-from .errors import AuthenticationError, InvalidCredentialsError, MyQError, RequestError
+from .errors import (
+    AuthenticationError,
+    InvalidCredentialsError,
+    MyQError,
+    RequestError,
+)
 from .garagedoor import MyQGaragedoor
 from .lamp import MyQLamp
 from .lock import MyQLock
@@ -414,24 +419,22 @@ class API:  # pylint: disable=too-many-instance-attributes
             _LOGGER.debug("Getting token")
             redirect_url = f"{OAUTH_BASE_URI}{resp.headers['Location']}"
 
+            get_token_basic_auth = base64.b64encode(f"{OAUTH_CLIENT_ID}:".encode("ascii")).decode("ascii")
             resp, data = await self.request(
                 returns="json",
                 method="post",
                 url=OAUTH_TOKEN_URI,
                 websession=session,
                 headers={
+                    "Authorization": f"Basic {get_token_basic_auth}",
                     "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "*/*",
                 },
                 data={
-                    "client_id": OAUTH_CLIENT_ID,
-                    "client_secret": OAUTH_CLIENT_SECRET,
-                    "code": parse_qs(urlsplit(redirect_url).query).get("code", ""),
+                    "code": parse_qs(urlsplit(redirect_url).query).get("code", "")[0],
                     "code_verifier": self._code_verifier,
                     "grant_type": "authorization_code",
                     "redirect_uri": OAUTH_REDIRECT_URI,
-                    "scope": parse_qs(urlsplit(redirect_url).query).get(
-                        "code", "MyQ_Residential offline_access"
-                    ),
                 },
                 login_request=True,
             )

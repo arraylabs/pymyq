@@ -13,7 +13,7 @@ In addition, there is also a [HACS myQ component](https://github.com/ehendrix23/
 
 ## Installation
 
-```python
+```shell
 pip install pymyq
 ```
 
